@@ -38,17 +38,22 @@ sls-plantform/
 
 ## Running
 
-### Backend
+### IntelliJ IDEA
 
+1. **Open Project Structure**: File → Project Structure → Modules
+2. **Import Module**: Click + → Import Module → Select `backend` folder
+3. **Run**: Click the green run button next to `PhotoApplication.main()`
+
+### Terminal
+
+**Backend:**
 ```bash
 cd backend
-# Use Java 21
 export JAVA_HOME="/c/Program Files/Java/jdk-21.0.2"
 mvn spring-boot:run
 ```
 
-### Frontend
-
+**Frontend:**
 ```bash
 cd frontend
 npm install
