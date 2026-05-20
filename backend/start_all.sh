@@ -4,6 +4,11 @@
 
 echo "=== Starting H5 Photo Upload Services ==="
 
+# Setup logs directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/../logs"
+mkdir -p "$LOG_DIR"
+
 # Kill any existing processes on our ports
 echo "Cleaning up existing processes..."
 pkill -f "spring-boot" 2>/dev/null || true
@@ -17,11 +22,10 @@ sleep 2
 echo ""
 echo "=== Starting Backend on port 8283 ==="
 export JAVA_HOME="/c/Program Files/Java/jdk-21.0.2"
-cd "$(dirname "$0")"
+cd "$SCRIPT_DIR"
 cd ..
-backend/pom.xml 2>/dev/null || cd backend
 
-nohup mvn spring-boot:run -Dmaven.repo.local="/c/Users/刘念/.m2/repository" -DskipTests > ../backend.log 2>&1 &
+nohup mvn spring-boot:run -Dmaven.repo.local="/c/Users/刘念/.m2/repository" -DskipTests > "$LOG_DIR/backend.log" 2>&1 &
 BACKEND_PID=$!
 echo "Backend starting... (PID: $BACKEND_PID)"
 
@@ -47,7 +51,7 @@ if [ ! -d "node_modules" ]; then
     npm install 2>&1 | tail -3
 fi
 
-nohup node node_modules/vite/bin/vite.js --port 5173 > ../frontend.log 2>&1 &
+nohup node node_modules/vite/bin/vite.js --port 5173 > "$LOG_DIR/frontend.log" 2>&1 &
 FRONTEND_PID=$!
 echo "Frontend starting... (PID: $FRONTEND_PID)"
 
@@ -72,5 +76,5 @@ if [ -n "$IP" ]; then
     echo "Mobile:   http://$IP:5173"
 fi
 echo ""
-echo "Logs: backend.log, frontend.log"
+echo "Logs: $LOG_DIR/backend.log, $LOG_DIR/frontend.log"
 echo "To stop: pkill -f 'spring-boot\|vite' "
