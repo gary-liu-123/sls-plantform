@@ -13,6 +13,7 @@ A minimal H5 application for photo upload with camera capture and gallery select
 
 ```
 sls-plantform/
+├── start_all.sh                # Start all services script
 ├── backend/                    # Spring Boot backend
 │   ├── pom.xml
 │   └── src/main/java/com/example/photo/
@@ -25,6 +26,7 @@ sls-plantform/
 │   └── src/
 │       ├── main.jsx
 │       └── App.jsx
+├── logs/                       # Service logs
 ├── docs/superpowers/          # Design and plan docs
 │   ├── specs/
 │   └── plans/
@@ -38,27 +40,24 @@ sls-plantform/
 
 ## Running
 
+### Start All Services (Recommended)
+
+```bash
+bash start_all.sh
+```
+
+This script will:
+1. Kill any existing services on ports 5173 and 8283
+2. Start the Spring Boot backend on port 8283
+3. Start the React frontend on port 5173
+4. Wait for services to be ready
+5. Display access URLs
+
 ### IntelliJ IDEA
 
 1. **Open Project Structure**: File → Project Structure → Modules
 2. **Import Module**: Click + → Import Module → Select `backend` folder
 3. **Run**: Click the green run button next to `PhotoApplication.main()`
-
-### Terminal
-
-**Backend:**
-```bash
-cd backend
-export JAVA_HOME="/c/Program Files/Java/jdk-21.0.2"
-mvn spring-boot:run
-```
-
-**Frontend:**
-```bash
-cd frontend
-npm install
-npm run dev
-```
 
 ## API
 
