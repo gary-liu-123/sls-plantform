@@ -17,6 +17,13 @@ public class PhotoController {
 
     @PostMapping("/api/upload")
     public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "File is required");
+            return ResponseEntity.badRequest().body(error);
+        }
+
         String fileName = file.getOriginalFilename();
         long size = file.getSize();
         log.info("Uploaded file: {}, size: {} bytes", fileName, size);
