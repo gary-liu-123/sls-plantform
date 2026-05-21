@@ -7,15 +7,16 @@ const API_URL = window.location.hostname === 'localhost'
 function App() {
   const [preview, setPreview] = useState(null)
   const [uploadStatus, setUploadStatus] = useState('')
+  const [debugInfo, setDebugInfo] = useState('')
 
   const handleFileChange = (event) => {
     const file = event.target.files[0]
     if (!file) {
-      console.log('No file selected')
+      setDebugInfo('No file selected')
       return
     }
 
-    console.log('File selected:', file.name, 'size:', file.size, 'type:', file.type)
+    setDebugInfo(`API: ${API_URL}\nFile: ${file.name}, Size: ${file.size} bytes, Type: ${file.type}`)
 
     // Read file for preview
     const reader = new FileReader()
@@ -23,7 +24,7 @@ function App() {
       setPreview(e.target.result)
     }
     reader.onerror = (e) => {
-      console.error('FileReader error:', e)
+      setDebugInfo(prev => prev + '\nFileReader error: ' + e)
     }
     reader.readAsDataURL(file)
 
@@ -31,25 +32,17 @@ function App() {
     const formData = new FormData()
     formData.append('file', file)
 
-    console.log('Uploading to:', API_URL)
-
     setUploadStatus('上传中...')
 
     fetch(API_URL, {
       method: 'POST',
-      body: formData,
-      headers: {
-        'Accept': 'application/json'
-      }
+      body: formData
     })
       .then((res) => {
-        console.log('Response status:', res.status, 'ok:', res.ok)
-        console.log('Response headers:', [...res.headers.entries()])
         if (res.ok) {
           setUploadStatus('上传成功')
         } else {
           res.text().then(text => {
-            console.error('Error response body:', text)
             setUploadStatus('上传失败: ' + text)
           }).catch(() => {
             setUploadStatus('上传失败')
@@ -57,8 +50,7 @@ function App() {
         }
       })
       .catch((err) => {
-        console.error('Upload error:', err)
-        setUploadStatus('上传失败')
+        setUploadStatus('上传失败: ' + err.message)
       })
   }
 
@@ -90,6 +82,7 @@ function App() {
       {preview && <img src={preview} alt="预览" style={{ maxWidth: '100%', marginTop: '16px' }} />}
 
       {uploadStatus && <p style={{ marginTop: '8px' }}>{uploadStatus}</p>}
+      {debugInfo && <pre style={{ fontSize: '10px', marginTop: '8px', color: '#666' }}>{debugInfo}</pre>}
     </div>
   )
 }
