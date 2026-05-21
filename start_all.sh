@@ -4,9 +4,12 @@
 
 echo "=== Starting H5 Photo Upload Services ==="
 
-# Setup logs directory
+# Setup paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG_DIR="$SCRIPT_DIR/../logs"
+PROJECT_DIR="$SCRIPT_DIR"
+BACKEND_DIR="$PROJECT_DIR/backend"
+FRONTEND_DIR="$PROJECT_DIR/frontend"
+LOG_DIR="$PROJECT_DIR/logs"
 mkdir -p "$LOG_DIR"
 
 # Kill any existing processes on our ports
@@ -14,6 +17,7 @@ echo "Cleaning up existing processes..."
 pkill -f "spring-boot" 2>/dev/null || true
 pkill -f "PhotoApplication" 2>/dev/null || true
 pkill -f "vite" 2>/dev/null || true
+pkill -f "node.*vite" 2>/dev/null || true
 
 # Wait for cleanup
 sleep 2
@@ -22,18 +26,19 @@ sleep 2
 echo ""
 echo "=== Starting Backend on port 8283 ==="
 export JAVA_HOME="/c/Program Files/Java/jdk-21.0.2"
-cd "$SCRIPT_DIR"
-cd ..
+export PATH="$JAVA_HOME/bin:$PATH"
 
-nohup mvn spring-boot:run -Dmaven.repo.local="/c/Users/刘念/.m2/repository" -DskipTests > "$LOG_DIR/backend.log" 2>&1 &
+cd "$BACKEND_DIR"
+nohup mvn spring-boot:run -DskipTests > "$LOG_DIR/backend.log" 2>&1 &
 BACKEND_PID=$!
 echo "Backend starting... (PID: $BACKEND_PID)"
 
-# Wait for backend to be ready
+# Wait for backend to be ready (check with GET first, then POST is fine too)
 echo "Waiting for backend to start..."
 for i in {1..30}; do
-    if curl -s http://localhost:8283/api/upload -X POST -w "%{http_code}" 2>/dev/null | grep -q "200\|400\|500"; then
-        echo "Backend is ready!"
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8283 --connect-timeout 2 2>/dev/null)
+    if [ "$HTTP_CODE" != "000" ]; then
+        echo "Backend is ready! (HTTP $HTTP_CODE)"
         break
     fi
     sleep 2
@@ -42,15 +47,15 @@ done
 # Start Frontend
 echo ""
 echo "=== Starting Frontend on port 5173 ==="
-cd ..
-cd frontend
 
 # Check if node_modules exists
-if [ ! -d "node_modules" ]; then
+if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
     echo "Installing frontend dependencies..."
+    cd "$FRONTEND_DIR"
     npm install 2>&1 | tail -3
 fi
 
+cd "$FRONTEND_DIR"
 nohup node node_modules/vite/bin/vite.js --port 5173 > "$LOG_DIR/frontend.log" 2>&1 &
 FRONTEND_PID=$!
 echo "Frontend starting... (PID: $FRONTEND_PID)"
@@ -58,8 +63,9 @@ echo "Frontend starting... (PID: $FRONTEND_PID)"
 # Wait for frontend to be ready
 echo "Waiting for frontend to start..."
 for i in {1..15}; do
-    if curl -s http://localhost:5173 2>/dev/null | grep -q "root"; then
-        echo "Frontend is ready!"
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173 --connect-timeout 2 2>/dev/null)
+    if [ "$HTTP_CODE" != "000" ]; then
+        echo "Frontend is ready! (HTTP $HTTP_CODE)"
         break
     fi
     sleep 1
@@ -77,4 +83,4 @@ if [ -n "$IP" ]; then
 fi
 echo ""
 echo "Logs: $LOG_DIR/backend.log, $LOG_DIR/frontend.log"
-echo "To stop: pkill -f 'spring-boot\|vite' "
+echo "To stop: pkill -f 'spring-boot\|vite\|PhotoApplication'"

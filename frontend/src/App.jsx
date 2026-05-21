@@ -1,6 +1,8 @@
 import { useState } from 'react'
 
-const API_URL = 'http://localhost:8283/api/upload'
+const API_URL = window.location.hostname === 'localhost'
+  ? 'http://localhost:8283/api/upload'
+  : `http://${window.location.hostname}:8283/api/upload`
 
 function App() {
   const [preview, setPreview] = useState(null)
@@ -8,12 +10,20 @@ function App() {
 
   const handleFileChange = (event) => {
     const file = event.target.files[0]
-    if (!file) return
+    if (!file) {
+      console.log('No file selected')
+      return
+    }
+
+    console.log('File selected:', file.name, 'size:', file.size, 'type:', file.type)
 
     // Read file for preview
     const reader = new FileReader()
     reader.onload = (e) => {
       setPreview(e.target.result)
+    }
+    reader.onerror = (e) => {
+      console.error('FileReader error:', e)
     }
     reader.readAsDataURL(file)
 
@@ -21,20 +31,33 @@ function App() {
     const formData = new FormData()
     formData.append('file', file)
 
+    console.log('Uploading to:', API_URL)
+
     setUploadStatus('上传中...')
 
     fetch(API_URL, {
       method: 'POST',
-      body: formData
+      body: formData,
+      headers: {
+        'Accept': 'application/json'
+      }
     })
       .then((res) => {
+        console.log('Response status:', res.status, 'ok:', res.ok)
+        console.log('Response headers:', [...res.headers.entries()])
         if (res.ok) {
           setUploadStatus('上传成功')
         } else {
-          setUploadStatus('上传失败')
+          res.text().then(text => {
+            console.error('Error response body:', text)
+            setUploadStatus('上传失败: ' + text)
+          }).catch(() => {
+            setUploadStatus('上传失败')
+          })
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('Upload error:', err)
         setUploadStatus('上传失败')
       })
   }
