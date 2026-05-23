@@ -25,45 +25,20 @@ Claude 不能直接 Read `.docx`，要先转成 markdown / 纯文本：
 - 兜底：用户在 Word 里"另存为 → Web 页（筛选过的）"或手工导出 md
 转完后先把 raw md 放在 `docs/requirements/_raw.md`，**不要直接进入拆分**——先快速通读一遍，看有没有图片/表格丢失，缺了用 OCR 或手工补。
 
-**1. 功能点清单梳理（前置，必须先做）**
-大文档**必须按业务模块拆**，但拆分前要先通读一遍，列出所有模块 + 每个模块下的功能点，作为后续拆分粒度的依据。
-
-功能点划分的原则：
-- **简单功能点可以合并**：一个 ralph-loop 实现多个相关功能点（如「获取用户信息」+「退出登录」都是读和清理，逻辑简单）
-- **复杂功能点必须独立**：需要复杂状态管理/多方交互的功能单独跑一个 ralph-loop（如「订单支付」涉及支付网关+回调+库存锁定，不要和其他功能混在一起）
-- **每个功能点必须可独立验证**：验收标准对应测试或 MCP 脚本，不能有「差不多就行」
-
-推荐结构：
+**1. Word 拆分策略（重要）**
+大文档**必须按业务模块拆**，不要按页码或字数硬切。推荐结构：
 ```
 docs/requirements/
-  00-overview.md              # 整体目标、角色、术语表、全局非功能需求
-  01-auth.md                  # 用户/登录/权限
-  02-<core-module>.md         # 核心业务模块 1
-  03-<core-module>.md         # 核心业务模块 2
+  00-overview.md          # 整体目标、角色、术语表、全局非功能需求
+  01-auth.md              # 用户/登录/权限
+  02-<core-module>.md     # 核心业务模块 1
+  03-<core-module>.md     # 核心业务模块 2
   ...
-  90-glossary.md              # 名词解释（可选）
-  99-open-questions.md        # 我读完后列出的疑点
+  90-glossary.md          # 名词解释（可选）
+  99-open-questions.md    # 我读完后列出的疑点
 ```
-
-每个 md 内按如下格式组织：
-```markdown
-## <模块名>
-
-### 功能点清单
-- [ ] <功能点 A>
-- [ ] <功能点 B>
-- [ ] <功能点 C>
-
-### ralph-loop 命令规划
-// 命令1：<功能点 A + B>（简单功能，可合并）
-/ralph-loop "实现<功能点 A>和<功能点 B>..." --max-iterations 20 --completion-promise "A+B-DONE"
-
-// 命令2：<功能点 C>（复杂功能，独立）
-/ralph-loop "实现<功能点 C>..." --max-iterations 30 --completion-promise "C-DONE"
-```
-
 拆分原则：
-- 一份 md = 一个业务模块
+- 一份 md = 一个能独立跑 ralph-loop 的模块
 - 单文件控制在 300-800 行，超过就再拆
 - 模块之间的依赖在 `00-overview.md` 顶部画清楚（A 依赖 B 的什么 API）
 - 我可以先帮你做这一步：通读 Word → 出拆分草案 → 你确认后再正式拆
@@ -86,18 +61,17 @@ docs/requirements/
 技术栈核心选型如下（写进 design 文档时按项目实际情况微调）：
 
 **前端 (frontend/)**
-- 框架：React 19 + TypeScript 5.7
-- 构建：Vite 6.1
-- CSS：Tailwind CSS 4.0（必须配 `@tailwindcss/vite` 插件）
-- UI 组件：Ant Design 5.24
-- 图表：Recharts 2.15
-- 路由：React Router DOM 7.1
-- 状态管理：Zustand 5.0
-- 表单：React Hook Form 7.54 + Zod 3.24
-- HTTP：Axios 1.7
-- **API 类型同步**：`openapi-typescript`（轻量）或 `orval`（带 hooks 生成），从后端 `/v3/api-docs` 拉 schema → 生成 `frontend/src/api/generated/*.ts`
+- **Vue 3.5** + Vue Router 4 + **Pinia 2**（JS + `<script setup>`，需要类型保护处用 JSDoc）
+- **Element Plus**（按需导入，仅用于 Form/Table/DatePicker 等重型组件）
+- **Tailwind CSS 3**（主视觉层，承接 `doc/req01/_tailwind.config.js` token）
+- **VueUse**（`useEventListener` / `useIntervalFn` / `useClipboard` / `useMediaDevices` 等）
+- **axios** HTTP 客户端
+- 构建：**Vite 5** + `@vitejs/plugin-vue`
+- 运行时配置：`public/config.js` → `window.globalConfig`
+- 包管理：`pnpm`（推荐）或 `npm`
+- **API 类型同步**：`openapi-typescript`，从后端 `/v3/api-docs` 拉 schema → 生成 `frontend/src/api/generated/schema.ts`
   - `package.json` 加 `"gen:api": "openapi-typescript http://localhost:8080/v3/api-docs -o src/api/generated/schema.ts"`
-  - 每个**后端**模块完成时必须跑 `npm run gen:api` 并 commit，否则前端用的是旧类型
+  - 每个**后端**模块完成时必须跑 `pnpm run gen:api` 并 commit，否则前端用的是旧类型
 
 **后端 (backend/)**
 - 框架：Spring Boot 3.4.1
