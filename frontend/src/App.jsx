@@ -5,6 +5,7 @@ const API_URL = window.location.hostname === 'localhost'
   : `http://${window.location.hostname}:8283/api/upload`
 
 function App() {
+  const [phone, setPhone] = useState('')
   const [preview, setPreview] = useState(null)
   const [uploadStatus, setUploadStatus] = useState('')
   const [debugInfo, setDebugInfo] = useState('')
@@ -16,9 +17,14 @@ function App() {
       return
     }
 
-    setDebugInfo(`API: ${API_URL}\nFile: ${file.name}, Size: ${file.size} bytes, Type: ${file.type}`)
+    if (!phone.trim()) {
+      setUploadStatus('请先填写手机号')
+      event.target.value = ''
+      return
+    }
 
-    // Read file for preview
+    setDebugInfo(`API: ${API_URL}\nPhone: ${phone}\nFile: ${file.name}, Size: ${file.size} bytes, Type: ${file.type}`)
+
     const reader = new FileReader()
     reader.onload = (e) => {
       setPreview(e.target.result)
@@ -28,9 +34,9 @@ function App() {
     }
     reader.readAsDataURL(file)
 
-    // Upload to backend
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('phone', phone.trim())
 
     setUploadStatus('上传中...')
 
@@ -39,14 +45,14 @@ function App() {
       body: formData
     })
       .then((res) => {
-        if (res.ok) {
+        return res.text().then(text => ({ ok: res.ok, text }))
+      })
+      .then(({ ok, text }) => {
+        if (ok) {
           setUploadStatus('上传成功')
+          setDebugInfo(prev => prev + '\nResponse: ' + text)
         } else {
-          res.text().then(text => {
-            setUploadStatus('上传失败: ' + text)
-          }).catch(() => {
-            setUploadStatus('上传失败')
-          })
+          setUploadStatus('上传失败: ' + text)
         }
       })
       .catch((err) => {
@@ -55,7 +61,18 @@ function App() {
   }
 
   return (
-    <div>
+    <div style={{ padding: '16px' }}>
+      <div style={{ marginBottom: '12px' }}>
+        <label>手机号（用于定位入职工单）：</label>
+        <input
+          type="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="请输入手机号"
+          style={{ marginLeft: '8px', padding: '4px 8px' }}
+        />
+      </div>
+
       <input
         type="file"
         id="cameraInput"
@@ -75,14 +92,14 @@ function App() {
       <button onClick={() => document.getElementById('cameraInput').click()}>
         拍照
       </button>
-      <button onClick={() => document.getElementById('galleryInput').click()}>
+      <button onClick={() => document.getElementById('galleryInput').click()} style={{ marginLeft: '8px' }}>
         照片上传
       </button>
 
       {preview && <img src={preview} alt="预览" style={{ maxWidth: '100%', marginTop: '16px' }} />}
 
       {uploadStatus && <p style={{ marginTop: '8px' }}>{uploadStatus}</p>}
-      {debugInfo && <pre style={{ fontSize: '10px', marginTop: '8px', color: '#666' }}>{debugInfo}</pre>}
+      {debugInfo && <pre style={{ fontSize: '10px', marginTop: '8px', color: '#666', whiteSpace: 'pre-wrap' }}>{debugInfo}</pre>}
     </div>
   )
 }

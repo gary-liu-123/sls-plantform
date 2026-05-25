@@ -19,6 +19,15 @@ pkill -f "PhotoApplication" 2>/dev/null || true
 pkill -f "vite" 2>/dev/null || true
 pkill -f "node.*vite" 2>/dev/null || true
 
+# Windows fallback: kill whatever is still listening on our ports
+# (Git Bash pkill can't reach java.exe spawned by mvn, so it leaks)
+for PORT in 8283 5173; do
+    PIDS=$(netstat -ano 2>/dev/null | grep "LISTENING" | grep ":$PORT " | awk '{print $5}' | sort -u)
+    for PID in $PIDS; do
+        [ -n "$PID" ] && [ "$PID" != "0" ] && taskkill //PID "$PID" //F >/dev/null 2>&1 || true
+    done
+done
+
 # Wait for cleanup
 sleep 2
 
