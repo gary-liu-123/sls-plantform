@@ -1,12 +1,15 @@
 import { useState } from 'react'
 
-const API_URL = window.location.hostname === 'localhost'
-  ? 'http://localhost:8283/api/upload'
-  : `http://${window.location.hostname}:8283/api/upload`
+const API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:8283'
+  : `http://${window.location.hostname}:8283`
+
+const UPLOAD_URL = `${API_BASE}/api/upload`
 
 function App() {
   const [phone, setPhone] = useState('')
   const [preview, setPreview] = useState(null)
+  const [previewSource, setPreviewSource] = useState('')
   const [uploadStatus, setUploadStatus] = useState('')
   const [debugInfo, setDebugInfo] = useState('')
 
@@ -23,11 +26,12 @@ function App() {
       return
     }
 
-    setDebugInfo(`API: ${API_URL}\nPhone: ${phone}\nFile: ${file.name}, Size: ${file.size} bytes, Type: ${file.type}`)
+    setDebugInfo(`API: ${UPLOAD_URL}\nPhone: ${phone}\nFile: ${file.name}, Size: ${file.size} bytes, Type: ${file.type}`)
 
     const reader = new FileReader()
     reader.onload = (e) => {
       setPreview(e.target.result)
+      setPreviewSource('本地预览')
     }
     reader.onerror = (e) => {
       setDebugInfo(prev => prev + '\nFileReader error: ' + e)
@@ -40,19 +44,29 @@ function App() {
 
     setUploadStatus('上传中...')
 
-    fetch(API_URL, {
+    fetch(UPLOAD_URL, {
       method: 'POST',
       body: formData
     })
-      .then((res) => {
-        return res.text().then(text => ({ ok: res.ok, text }))
-      })
+      .then((res) => res.text().then(text => ({ ok: res.ok, text })))
       .then(({ ok, text }) => {
-        if (ok) {
-          setUploadStatus('上传成功')
-          setDebugInfo(prev => prev + '\nResponse: ' + text)
-        } else {
+        setDebugInfo(prev => prev + '\nResponse: ' + text)
+        if (!ok) {
           setUploadStatus('上传失败: ' + text)
+          return
+        }
+        setUploadStatus('上传成功，正在获取服务器图片...')
+        try {
+          const data = JSON.parse(text)
+          if (data.previewUrl) {
+            setPreview(API_BASE + data.previewUrl)
+            setPreviewSource('服务器图片')
+            setUploadStatus('上传成功')
+          } else {
+            setUploadStatus('上传成功，但未返回 previewUrl')
+          }
+        } catch (e) {
+          setUploadStatus('上传成功，解析响应失败: ' + e.message)
         }
       })
       .catch((err) => {
@@ -96,7 +110,12 @@ function App() {
         照片上传
       </button>
 
-      {preview && <img src={preview} alt="预览" style={{ maxWidth: '100%', marginTop: '16px' }} />}
+      {preview && (
+        <div style={{ marginTop: '16px' }}>
+          {previewSource && <p style={{ fontSize: '12px', color: '#666', margin: '0 0 4px' }}>{previewSource}</p>}
+          <img src={preview} alt="预览" style={{ maxWidth: '100%' }} />
+        </div>
+      )}
 
       {uploadStatus && <p style={{ marginTop: '8px' }}>{uploadStatus}</p>}
       {debugInfo && <pre style={{ fontSize: '10px', marginTop: '8px', color: '#666', whiteSpace: 'pre-wrap' }}>{debugInfo}</pre>}

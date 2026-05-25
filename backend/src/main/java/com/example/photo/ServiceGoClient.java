@@ -104,6 +104,65 @@ public class ServiceGoClient {
         return resp;
     }
 
+    /**
+     * 按 id 查工单详情。比 listAttachments 更稳——
+     * 文档说的 /v1/fileField/attachments 在当前环境返回 text/html 不通，
+     * 而 /api/v1/data 的响应里 attachment.attachmentList 已经包含全部附件。
+     */
+    public JsonNode queryDataById(long dataId, String objectApiName) throws IOException {
+        long ts = Instant.now().getEpochSecond();
+        String url = UriComponentsBuilder.fromHttpUrl(host + "/api/v1/data")
+                .queryParam("objectApiName", objectApiName)
+                .queryParam("id", dataId)
+                .queryParam("email", email)
+                .queryParam("timestamp", ts)
+                .queryParam("sign", signFor(ts))
+                .build()
+                .toUriString();
+
+        log.info("ServiceGo query by id: {}", url);
+        JsonNode resp = restTemplate.getForObject(url, JsonNode.class);
+        ensureBusinessOk(resp);
+        return resp;
+    }
+
+    /**
+     * 取指定字段最新一张附件的下载 URL（已带签名）。
+     */
+    public String latestAttachmentUrl(long dataId, String objectApiName, String fieldApiName) throws IOException {
+        JsonNode resp = queryDataById(dataId, objectApiName);
+        JsonNode fields = resp.path("data").path("fieldDataList");
+        if (!fields.isArray()) {
+            return null;
+        }
+        for (JsonNode f : fields) {
+            if (!fieldApiName.equals(f.path("fieldApiName").asText())) continue;
+            JsonNode list = f.path("attachment").path("attachmentList");
+            if (!list.isArray() || list.isEmpty()) {
+                list = f.path("picture").path("attachmentList"); // field_type_image
+            }
+            if (!list.isArray() || list.isEmpty()) return null;
+            JsonNode last = list.get(list.size() - 1);
+            String addr = last.path("docAddress").asText(null);
+            if (addr == null || addr.isBlank()) return null;
+            return addr.startsWith("http") ? addr : host + addr;
+        }
+        return null;
+    }
+
+    /**
+     * 给下载链接补上 email/timestamp/sign，下载内部存储资源时 ServiceGo 需要这套鉴权。
+     */
+    public String signDownloadUrl(String url) {
+        long ts = Instant.now().getEpochSecond();
+        return UriComponentsBuilder.fromHttpUrl(url)
+                .queryParam("email", email)
+                .queryParam("timestamp", ts)
+                .queryParam("sign", signFor(ts))
+                .build()
+                .toUriString();
+    }
+
     private String signFor(long timestamp) {
         return sha256(email + "&" + apiToken + "&" + timestamp);
     }
