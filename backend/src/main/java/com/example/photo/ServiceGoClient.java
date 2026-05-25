@@ -163,6 +163,66 @@ public class ServiceGoClient {
                 .toUriString();
     }
 
+    public JsonNode queryByUniqueField(String objectApiName, String uniqueFieldApiName, String uniqueFieldValue) throws IOException {
+        long ts = Instant.now().getEpochSecond();
+        String url = UriComponentsBuilder.fromHttpUrl(host + "/api/v1/data")
+                .queryParam("objectApiName", objectApiName)
+                .queryParam("uniqueFieldApiName", uniqueFieldApiName)
+                .queryParam("uniqueFieldValue", uniqueFieldValue)
+                .queryParam("email", email)
+                .queryParam("timestamp", ts)
+                .queryParam("sign", signFor(ts))
+                .build()
+                .toUriString();
+
+        log.info("ServiceGo queryByUniqueField: {}", url);
+        JsonNode resp = restTemplate.getForObject(url, JsonNode.class);
+        log.info("ServiceGo queryByUniqueField response: {}", resp);
+        ensureBusinessOk(resp);
+        return resp;
+    }
+
+    public JsonNode queryList(String objectApiName, int filterId, int pageNum, int pageSize) throws IOException {
+        long ts = Instant.now().getEpochSecond();
+        String url = UriComponentsBuilder.fromHttpUrl(host + "/api/v1/datas")
+                .queryParam("objectApiName", objectApiName)
+                .queryParam("filterId", filterId)
+                .queryParam("pageNum", pageNum)
+                .queryParam("pageSize", pageSize)
+                .queryParam("email", email)
+                .queryParam("timestamp", ts)
+                .queryParam("sign", signFor(ts))
+                .build()
+                .toUriString();
+
+        log.info("ServiceGo queryList: {}", url);
+        JsonNode resp = restTemplate.getForObject(url, JsonNode.class);
+        log.info("ServiceGo queryList response: {}", resp);
+        ensureBusinessOk(resp);
+        return resp;
+    }
+
+    public JsonNode updateData(String objectApiName, long id, String fieldDataListJson) throws IOException {
+        long ts = Instant.now().getEpochSecond();
+        String url = UriComponentsBuilder.fromHttpUrl(host + "/api/v1/data")
+                .queryParam("email", email)
+                .queryParam("timestamp", ts)
+                .queryParam("sign", signFor(ts))
+                .build()
+                .toUriString();
+
+        String body = "{\"objectApiName\":\"" + objectApiName + "\",\"id\":" + id + ",\"fieldDataList\":" + fieldDataListJson + "}";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> entity = new HttpEntity<>(body, headers);
+
+        log.info("ServiceGo updateData: {}", url);
+        JsonNode resp = restTemplate.exchange(url, org.springframework.http.HttpMethod.PUT, entity, JsonNode.class).getBody();
+        log.info("ServiceGo updateData response: {}", resp);
+        ensureBusinessOk(resp);
+        return resp;
+    }
+
     private String signFor(long timestamp) {
         return sha256(email + "&" + apiToken + "&" + timestamp);
     }

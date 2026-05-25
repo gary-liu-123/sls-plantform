@@ -37,8 +37,8 @@ netstat -ano | grep ":8283 \|:5173 " | awk '{print $5}' | sort -u | xargs -I{} t
 | --- | --- | --- | --- | --- |
 | `com.example.photo.PhotoController` | POST | `/api/upload` | `file`（MultipartFile）、`phone`（手机号） | 按手机号查入职工单 dataId，再将文件上传到 ServiceGo 的 `validIdCard` 附件字段；返回 `previewUrl` 供前端展示服务器图片 |
 | `com.example.photo.PhotoController` | GET | `/api/attachment` | `dataId`（工单 ID）、`field`（字段 API 名） | 代理下载 ServiceGo 附件：查工单详情取最新附件 `docAddress`，加签名后流式返回图片字节流（解决跨域和签名问题） |
-| `com.aicoding.proxy.ContractWorkOrderTest` | main | — | — | 合同工单列表查询（`/api/v1/datas` + `filterId=241618`，分页） |
-| `com.aicoding.proxy.ContractWorkOrderQueryTest` | main | — | — | 按 ID 查询单条合同工单（`id=162870171`） |
-| `com.aicoding.proxy.ContractWorkOrderQueryByPhoneTest` | main | — | — | 按手机号（`phone`）唯一字段查询合同工单 |
-| `com.aicoding.proxy.EntryWorkOrderQueryByPhoneTest` | main | — | — | 按手机号（`personalPhone`）唯一字段查询入职工单 |
-| `com.aicoding.proxy.EntryWorkOrderUpdateTest` | main | — | — | 按 ID 更新入职工单全量字段（PUT `/api/v1/data`） |
+| `com.example.photo.ContractWorkOrderTest` | @Test | — | — | 合同工单列表查询（`/api/v1/datas` + `filterId=241618`，分页） |
+| `com.example.photo.ContractWorkOrderQueryTest` | @Test | — | — | 按 ID 查询单条合同工单（`id=162870171`） |
+| `com.example.photo.ContractWorkOrderQueryByPhoneTest` | @Test | — | — | 按手机号（`phone`）唯一字段查询合同工单 |
+| `com.example.photo.EntryWorkOrderQueryByPhoneTest` | @Test | — | — | 按手机号（`personalPhone`）唯一字段查询入职工单 |
+| `com.example.photo.EntryWorkOrderUpdateTest` | @Test | — | — | 按 ID 更新入职工单全量字段（PUT `/api/v1/data`） |
