@@ -202,6 +202,39 @@ public class ServiceGoClient {
         return resp;
     }
 
+    /**
+     * 高级搜索：POST /api/v1/datas/search。
+     * 通过 filterId + conditionList 多条件筛选记录，单选字段用 is/not，电话字段用 is_any/not_any。
+     * judgeStrategy 默认 1（满足所有条件）。filterId 必填，需要在 ServiceGo 后台预配。
+     */
+    public JsonNode searchData(String objectApiName, int filterId, String conditionListJson,
+                               int pageNum, int pageSize) throws IOException {
+        long ts = Instant.now().getEpochSecond();
+        String url = UriComponentsBuilder.fromHttpUrl(host + "/api/v1/datas/search")
+                .queryParam("email", email)
+                .queryParam("timestamp", ts)
+                .queryParam("sign", signFor(ts))
+                .build()
+                .toUriString();
+
+        String body = "{\"objectApiName\":\"" + objectApiName + "\""
+                + ",\"filterId\":" + filterId
+                + ",\"pageNum\":" + pageNum
+                + ",\"pageSize\":" + pageSize
+                + ",\"conditionList\":" + conditionListJson
+                + "}";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> entity = new HttpEntity<>(body, headers);
+
+        log.info("ServiceGo searchData: {} body={}", url, body);
+        JsonNode resp = restTemplate.postForObject(url, entity, JsonNode.class);
+        log.info("ServiceGo searchData response: {}", resp);
+        ensureBusinessOk(resp);
+        return resp;
+    }
+
     public JsonNode updateData(String objectApiName, long id, String fieldDataListJson) throws IOException {
         long ts = Instant.now().getEpochSecond();
         String url = UriComponentsBuilder.fromHttpUrl(host + "/api/v1/data")
