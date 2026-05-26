@@ -42,3 +42,4 @@ netstat -ano | grep ":8283 \|:5173 " | awk '{print $5}' | sort -u | xargs -I{} t
 | `com.example.photo.ContractWorkOrderQueryByPhoneTest` | @Test | — | — | 按手机号（`phone`）唯一字段查询合同工单 |
 | `com.example.photo.EntryWorkOrderQueryByPhoneTest` | @Test | — | — | 按手机号（`personalPhone`）唯一字段查询入职工单 |
 | `com.example.photo.EntryWorkOrderUpdateTest` | @Test | — | — | 按 ID 更新入职工单全量字段（PUT `/api/v1/data`） |
+| `com.example.sms.SmsServiceTest` | @Test | — | `phone`、`templateId` | 调用 SERES 短信平台发送短信（先取 token 再 POST `/api/sms/messages`），需用 `@SpringBootTest(classes = PhotoApplication.class)` 启动 |
