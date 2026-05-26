@@ -235,6 +235,23 @@ public class ServiceGoClient {
         return resp;
     }
 
+    public JsonNode queryFields(String objectApiName) throws IOException {
+        long ts = Instant.now().getEpochSecond();
+        String url = UriComponentsBuilder.fromHttpUrl(host + "/api/v1/fields")
+                .queryParam("objectApiName", objectApiName)
+                .queryParam("email", email)
+                .queryParam("timestamp", ts)
+                .queryParam("sign", signFor(ts))
+                .build()
+                .toUriString();
+
+        log.info("ServiceGo queryFields: {}", url);
+        JsonNode resp = restTemplate.getForObject(url, JsonNode.class);
+        log.info("ServiceGo queryFields response: {}", resp);
+        ensureBusinessOk(resp);
+        return resp;
+    }
+
     public JsonNode updateData(String objectApiName, long id, String fieldDataListJson) throws IOException {
         long ts = Instant.now().getEpochSecond();
         String url = UriComponentsBuilder.fromHttpUrl(host + "/api/v1/data")
