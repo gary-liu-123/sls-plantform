@@ -19,7 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 class EntryWorkOrderSearchByPhoneAndStatusTest {
 
     /** TODO: 替换成 ServiceGo 后台为 entryWorkOrder 配置好的过滤器 ID */
-    private static final int FILTER_ID = 0;
+    private static final int FILTER_ID = 241586;
 
     @Autowired
     private ServiceGoClient serviceGoClient;
