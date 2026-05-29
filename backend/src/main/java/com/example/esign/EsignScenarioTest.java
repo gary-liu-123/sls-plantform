@@ -185,6 +185,40 @@ public class EsignScenarioTest {
                 System.out.println("签署链接: " + signUrl);
             }
 
+            //todo 转成免登签署链接
+            String ssoSignUrl = "";
+            if (!signUrl.isEmpty()) {
+                System.out.println("\n>>> 7. 转换为免登签署链接");
+
+                // 7.1 第三方获取 AccessToken（传项目 id + 项目秘钥）
+                JSONObject tokenBody = new JSONObject();
+                tokenBody.put("clientId", config.getProjectId());
+                tokenBody.put("clientSecret", config.getProjectSecret());
+                JSONObject tokenJson = client.getAccessToken(tokenBody);
+                String accessToken = tokenJson.getJSONObject("data").getString("accessToken");
+                System.out.println("accessToken: " + accessToken);
+
+                // 7.2 获取 ssoToken
+                //   loginAccount = 登录账号(手机号) 经 AES 加密后的 base64，密钥 = clientSecret(项目秘钥)
+                //   redirectUrl  = 上一步拿到的签署链接 signUrl
+                String loginAccount = aesEncryptBase64(EMP_MOBILE, config.getProjectSecret());
+                System.out.println("loginAccount(加密后): " + loginAccount);
+
+                JSONObject ssoBody = new JSONObject();
+                ssoBody.put("accessToken", accessToken);
+                ssoBody.put("clientId", config.getProjectId());
+                ssoBody.put("loginAccount", loginAccount);
+                ssoBody.put("redirectUrl", signUrl);
+
+                JSONObject ssoJson = client.getSsoToken(ssoBody);
+                ssoSignUrl = ssoJson.getJSONObject("data").getString("ssoRedirectUrl");
+                // 内网IP替换为域名
+                if (ssoSignUrl != null && !ssoSignUrl.isEmpty()) {
+                    ssoSignUrl = ssoSignUrl.replaceFirst("https?://[^/]+", config.getHost());
+                }
+                System.out.println("免登签署链接: " + ssoSignUrl);
+            }
+
             // ===== 结果汇总 =====
             System.out.println("\n============================================");
             System.out.println("  organizationCode: " + organizationCode);
@@ -192,11 +226,26 @@ public class EsignScenarioTest {
             System.out.println("  userCode:         " + userCode);
             System.out.println("  signFlowId:       " + signFlowId);
             System.out.println("  签署链接:         " + signUrl);
+            System.out.println("  免登签署链接:     " + ssoSignUrl);
             System.out.println("============================================");
         } catch (Exception e) {
             System.err.println("流程失败: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    /**
+     * AES 加密后 base64 —— 用于 getSsoToken 的 loginAccount。
+     * 密钥为 clientSecret（项目秘钥），赛力斯测试环境秘钥为 16 字节，
+     * 采用 AES/ECB/PKCS5Padding（请求里没有 IV，故用 ECB）。
+     */
+    private static String aesEncryptBase64(String plaintext, String secret) throws Exception {
+        javax.crypto.spec.SecretKeySpec keySpec =
+                new javax.crypto.spec.SecretKeySpec(secret.getBytes(java.nio.charset.StandardCharsets.UTF_8), "AES");
+        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/ECB/PKCS5Padding");
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, keySpec);
+        byte[] encrypted = cipher.doFinal(plaintext.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return java.util.Base64.getEncoder().encodeToString(encrypted);
     }
 
     /**
