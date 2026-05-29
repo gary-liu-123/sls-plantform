@@ -167,7 +167,7 @@ public class EsignScenarioTest {
             signerInfo.put("autoSign", 0); //是否自动盖章 0：不自动盖章， 1：自动盖章
             signerInfo.put("signMode", 0);          // 0=顺序签
             startBody.put("signerInfos", java.util.Collections.singletonList(signerInfo));
-            startBody.put("signNotifyUrl","");
+            startBody.put("signNotifyUrl","localhost:8080/api/esign/callback");//https://esign-test.seres.cn/doc-service-front/doc/mzm94qfn7ktkmnus
 
             String startResult = client.doPost("/esign-signs/v1/signFlow/createAndStart", startBody);
             JSONObject startJson = JSONObject.parseObject(startResult);

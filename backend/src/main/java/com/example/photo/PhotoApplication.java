@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestClient;
 
-@SpringBootApplication(scanBasePackages = {"com.example.photo", "com.example.sms"})
+@SpringBootApplication(scanBasePackages = {"com.example.photo", "com.example.sms", "com.example.esign"})
 public class PhotoApplication {
 
     public static void main(String[] args) {
