@@ -32,6 +32,7 @@ public class EsignScenarioTest {
 
     public static void main(String[] args) {
         EsignConfig config = new EsignConfig();
+        //yml 配置
         config.setHost("https://esign-test.seres.cn");
         config.setProjectId("1000007");
         config.setProjectSecret("7l3cIaTfR4LiKwzQ");
