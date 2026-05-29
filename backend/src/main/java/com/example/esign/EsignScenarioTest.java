@@ -68,7 +68,7 @@ public class EsignScenarioTest {
             JSONArray sealRecords = sealData.getJSONArray("records");
             if (sealRecords == null || sealRecords.isEmpty()) throw new RuntimeException("未找到公章");
             JSONObject sealRecord = sealRecords.getJSONObject(0);
-            String sealId = sealRecord.getString("sealId");
+            String sealId = sealRecord.getString("sealId"); // 添加公司盖章的时候，要用到
             // 用印人
             JSONArray signers = sealRecord.getJSONArray("sealsignersInfos");
             String sealUserCode = (signers != null && !signers.isEmpty())
@@ -172,7 +172,7 @@ public class EsignScenarioTest {
             String startResult = client.doPost("/esign-signs/v1/signFlow/createAndStart", startBody);
             JSONObject startJson = JSONObject.parseObject(startResult);
             JSONObject startData = startJson.getJSONObject("data");
-            String signFlowId = startData.getString("signFlowId");
+            String signFlowId = startData.getString("signFlowId"); // 企业用印 的时候，也需要用到这个值
             System.out.println("signFlowId: " + signFlowId);
 
             // 响应里直接返回签署链接
@@ -185,7 +185,7 @@ public class EsignScenarioTest {
                 System.out.println("签署链接: " + signUrl);
             }
 
-            //todo 转成免登签署链接
+            //转成免登签署链接
             String ssoSignUrl = "";
             if (!signUrl.isEmpty()) {
                 System.out.println("\n>>> 7. 转换为免登签署链接");
