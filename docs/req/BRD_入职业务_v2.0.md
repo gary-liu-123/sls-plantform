@@ -407,41 +407,79 @@
 
 > **字段差异待确认（已登记 Q11/Q12/Q13）：**
 > - **#5 身份证背面字段不存在**：工单仅有 `validIdCard`（label=证件照），无独立背面字段。需确认：正反面都传到 `validIdCard`（多附件）还是新建背面字段。
-> - **#3 员工照片存在两个字段**：`staffPhoto`（图片类型）+ `staffPhotobak`（附件类型，带 bak 后缀）。需确认用哪个、bak 是否废弃。
-> - **资料上传真实性承诺**：工单字段为 `dataUploadCommitmentBAK`（带 BAK 后缀），疑似备份/废弃字段，且与 Q9（保存位置矛盾）叠加，需业务方明确。
+> - **#3 员工照片存在两个字段**：`staffPhoto`（图片类型）+ `staffPhotobak`（附件类型，带 bak 后缀）。确认用staffPhoto。
+> - **资料上传真实性承诺**：工单字段为 `dataUploadCommitmentBAK`（带 BAK 后缀），为废弃字段，需业务方明确了用这个dataUploadCommitment。
 
-> 现状提示：项目现有 `POST /api/upload` 仅支持上传到**单一固定字段**（后端配置项 `servicego.entry-id-card-field`，当前写死 `validIdCard`），客户端不传 field 参数。要支撑上表 10 类附件，需扩展接口以接收 `field` 参数。详见 4.4.4。
+> **定位说明（重要）**：本入职业务平台的附件上传为**独立实现**，不依赖、不复用任何现有项目代码。项目历史上存在的 `PhotoController` / `ServiceGoClient`（单字段照片上传，写死 `validIdCard`）仅作为 **ServiceGo 附件对接模式的参考蓝本**，不构成运行时依赖。本平台据此从零设计一套支持「多附件字段」的上传/回显接口，`field` 参数从设计之初即为必填项，不存在「改造老接口」一说。详见 4.4.4。
 
-#### 4.4.4 附件上传机制（对齐项目现有实现）
+#### 4.4.4 附件上传机制（本平台独立实现，参考 ServiceGo 对接模式）
 
-附件不进入 `fieldDataList`，由独立的代理接口处理。整体为「**前端校验 → 后端代理上传 → 回显**」三段，后端对接 ServiceGo 附件三件套。
+附件不进入 `fieldDataList`，由本平台独立设计的代理接口处理。整体覆盖「**页面打开回显已存附件 → 前端校验 → （重传时先删旧）→ 后端代理上传 → 回显新图**」完整生命周期，后端对接 ServiceGo 附件四件套（查列表 / 上传 / 删除 / 下载）。
 
-**(1) 上传接口 `POST /api/upload`（multipart/form-data）**
+> **完整生命周期（重要）**：
+> 1. **页面打开**：先根据工单系统中该字段已保存的附件，回显已上传的图片（调附件回显接口，见 (2)）。
+> 2. **首次上传**：该字段无附件 → 前端校验通过 → 直接调上传接口。
+> 3. **重新上传**：该字段已有附件，员工想换一张 → **必须先调 ServiceGo 删除附件接口删掉旧图，再调上传接口**（ServiceGo 文件字段不会自动覆盖，不删旧图会变成多附件叠加）。
+
+> **可参考的 ServiceGo 对接模式（来自蓝本，非依赖）**：① 代理模式（前端经本平台后端中转，不直连 ServiceGo，解决签名+跨域+下载鉴权）；② 四件套流程（查附件列表 GET `/v1/fileField/attachments` → 上传 POST `/api/v1/fileField/attachments` → 删除 PUT `/v1/fileField/attachments/remove` → 下载回显）；③ 签名规则 `SHA-256(email + "&" + apiToken + "&" + timestamp)`；④ 附件读取从 `fieldDataList[].attachment.attachmentList`（图片类回退 `picture.attachmentList`）取最新 `docAddress`，或从查列表接口取 `data[].docId` / `downloadAddress`。
+
+**(1) 上传接口 `POST /api/entry/attachment/upload`（multipart/form-data）**
+
+> 本平台独立设计的接口。接口名仅为约定，最终以实现为准；从设计之初即支持多附件字段（通过 `field` 参数区分 10 类附件），无「写死单字段」的历史包袱。
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | file | 是 | 附件文件（MultipartFile） |
 | phone | 是 | 手机号，后端据此定位入职工单 dataId |
-| field | **待扩展** | 目标附件字段 apiName（如 validIdCard）。现有实现写死单字段，多附件场景需新增此参数 |
+| field | 是 | 目标附件字段 apiName（如 `validIdCard`、`staffPhoto`），区分 10 类附件 |
 
-后端处理流程（现有 `PhotoController` + `ServiceGoClient`）：
-1. 校验 file、phone 非空。
+后端处理流程（参考蓝本的对接套路，本平台独立实现）：
+1. 校验 file、phone、field 非空。
 2. `queryDataIdByPhone(entryWorkOrder, "personalPhone", phone)` → 拿到工单 dataId（GET `/api/v1/data`，uniqueFieldApiName = personalPhone）。
-3. `uploadAttachment(dataId, objectApiName, fieldApiName, fileName, bytes, contentType)` → POST ServiceGo `/api/v1/fileField/attachments`（multipart，form 含 objectApiName / dataId / fieldApiName / file）。
-4. 返回：`{ success, dataId, fieldApiName, previewUrl }`，其中 `previewUrl = /api/attachment?dataId=X&field=Y&ts=<时间戳>`（带 ts 防前端缓存旧图）。
+3. **重传前清理**：查该字段附件列表（GET ServiceGo `/v1/fileField/attachments`），若已存在附件，先调删除接口（见 (3)）清空旧图，再上传，避免同字段附件叠加。
+4. `uploadAttachment(dataId, objectApiName, field, fileName, bytes, contentType)` → POST ServiceGo `/api/v1/fileField/attachments`（multipart，form 含 objectApiName / dataId / fieldApiName / file）。
+5. 返回：`{ success, dataId, fieldApiName, previewUrl }`，其中 `previewUrl = /api/entry/attachment?dataId=X&field=Y&ts=<时间戳>`（带 ts 防前端缓存旧图）。
 
-**(2) 回显/下载接口 `GET /api/attachment`**
+> 关于「重传先删」的归属：步骤 3 可由后端在 upload 接口内**自动完成**（推荐，前端无感，单次调用即「替换」语义）；也可由前端先显式调删除接口 (3) 再调上传。本平台默认采用**后端自动清理**方案，对外表现为「上传即替换」。
+
+**(2) 回显/下载接口 `GET /api/entry/attachment`**
+
+> **页面打开即调用**：资料填写页加载时，对每个附件字段调一次本接口，把工单系统中已保存的图片回显出来（已传过的显示缩略图，未传的显示上传占位）。这是附件生命周期的第一步。
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | dataId | 是 | 工单 ID |
 | field | 是 | 附件字段 apiName |
 
-后端 `latestAttachmentUrl` 从工单 `fieldDataList[].attachment.attachmentList`（图片类字段回退到 `picture.attachmentList`）取**最新一张**附件的 `docAddress`，经 `signDownloadUrl` 补签名（email + timestamp + sign，SHA-256）后由后端**流式代理回传**，从而解决跨域与下载鉴权问题。返回头 `Cache-Control: no-store`。
+后端 `latestAttachmentUrl` 从工单 `fieldDataList[].attachment.attachmentList`（图片类字段回退到 `picture.attachmentList`）取**最新一张**附件的 `docAddress`，经 `signDownloadUrl` 补签名（email + timestamp + sign，SHA-256）后由后端**流式代理回传**，从而解决跨域与下载鉴权问题。返回头 `Cache-Control: no-store`。该字段无附件时返回 404 / 空，前端按「未上传」处理。
 
 > 设计要点：附件下载必须经后端代理加签，前端不能直连 ServiceGo 存储地址（无签名会被拒、且跨域）。
 
-**(3) 前端上传校验规则（参考批量上传设计）**
+**(3) 删除附件接口 `DELETE /api/entry/attachment`（本平台独立实现，转发 ServiceGo 删除接口）**
+
+> 用于「重新上传」场景：换图前先删旧图。本接口封装 ServiceGo 的 PUT `/v1/fileField/attachments/remove`（注意路径前缀比其它接口少 `/api`）。
+
+本平台对外接口参数：
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| dataId | 是 | 工单 ID |
+| field | 是 | 附件字段 apiName |
+| docIds | 否 | 要删除的附件 docId 数组；不传则等价清空该字段全部附件 |
+
+后端转发到 ServiceGo `PUT /v1/fileField/attachments/remove` 的参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| dataId | 整型 | 是 | 记录 ID |
+| objectApiName | 字符串 | 是 | = `entryWorkOrder` |
+| fieldApiName | 字符串 | 是 | 附件字段 apiName |
+| isClear | 整型 | 是 | 是否清空，0=否 1=是 |
+| docIds | 字符串数组 | 否 | 要删的 docId；`isClear=0` 时数组必须有元素 |
+
+> docId 从查附件列表接口（ServiceGo GET `/v1/fileField/attachments`，返回 `data[].docId`）取得。重传时若直接清空该字段（`isClear=1`）最简单，无需先查 docId。
+
+**(4) 前端上传校验规则（参考批量上传设计）**
 
 针对图片类附件（尤其员工照片），前端在上传前做本地校验，状态分 `pass / warn / fail`，仅 `fail` 阻断上传：
 
@@ -455,10 +493,12 @@
 
 > 注：魔数/尺寸校验主要面向员工照片（1 寸照）。身份证、证书等扫描件可放宽尺寸校验，但格式与大小（≤2MB）规则通用。
 
-**(4) 多附件上传策略**
+**(5) 多附件上传策略**
 
-- 每类附件独立调用 `POST /api/upload`（带各自 field），互不影响，单个失败可单独重试。
-- 上传成功后用返回的 `previewUrl` 即时回显缩略图。
+- **页面打开**：遍历各附件字段调 `GET /api/entry/attachment` 回显已存图片（见 (2)）。
+- 每类附件独立调用 `POST /api/entry/attachment/upload`（带各自 field），互不影响，单个失败可单独重试。
+- **重新上传**：该字段已有图 → 上传接口内部先清旧再传（后端自动，见 (1) 步骤 3），对外即「上传即替换」；前端也可显式先调 `DELETE /api/entry/attachment` 再传。
+- 上传成功后用返回的 `previewUrl`（带 ts）即时回显新缩略图，覆盖旧图。
 - 批量/多图场景并发上传建议并发数 3，避免 ServiceGo 端压力；前端可用 SHA-256 + localStorage 做客户端去重（"已上传过，跳过"）。
 - 弱网下未上传成功的附件保留在列表，恢复后重试，不影响已填写的文本字段。
 
@@ -489,8 +529,9 @@
 
 **关联接口**：
 - 文本字段写工单：I020-04-01（PUT `/api/v1/data`，更新 `fieldDataList`）。
-- 附件上传：`POST /api/upload`（带 field），后端转 ServiceGo `/api/v1/fileField/attachments`。
-- 附件回显：`GET /api/attachment?dataId&field`（后端加签代理下载）。
+- 附件上传：`POST /api/entry/attachment/upload`（带 field，本平台独立实现），后端转 ServiceGo `/api/v1/fileField/attachments`。
+- 附件回显：`GET /api/entry/attachment?dataId&field`（本平台独立实现，后端加签代理下载；**页面打开即调用回显已存图片**）。
+- 附件删除：`DELETE /api/entry/attachment`（本平台独立实现，转 ServiceGo PUT `/v1/fileField/attachments/remove`；**重新上传前删旧图**）。
 - 字段元数据 + 选项 + 权限：`GET /api/v1/fields?objectApiName=entryWorkOrder`。
 - 工单数据回填：按 personalPhone 查工单（GET `/api/v1/data`）。
 
@@ -670,9 +711,9 @@
 | SG-API-001 | 创建对象记录 | 建工单 | 工单创建 |
 | SG-API-002 | 更新对象记录 | 按 ID/唯一字段更新 | 暂存、提交、状态回写 |
 | SG-API-003 | 查询单条记录 | 详情 | 登录查工单 |
-| SG-API-004 | 文件图片字段上传 | 附件上传 | `POST /api/upload` |
-| SG-API-005 | 文件字段列表 | 附件清单 | `GET /api/attachment` |
-| SG-API-006 | 删除附件 | 删/清空 | 附件管理 |
+| SG-API-004 | 文件图片字段上传 | 附件上传 | `POST /api/entry/attachment/upload`（本平台独立实现） |
+| SG-API-005 | 文件字段列表 | 附件清单（取 docId/下载地址，供回显与删除定位） | 后端内部调用（回显/删除前查列表） |
+| SG-API-006 | 删除附件 | 删/清空（重新上传前删旧图） | `DELETE /api/entry/attachment`（本平台独立实现） |
 | SG-API-007 | 外部系统数据推送 | 主动推送 | 同步外部系统 |
 | SG-API-008 | 查询字段列表 | 字段元数据 | `GET /api/v1/fields` |
 | SG-API-009 | 创建字段选项值 | 选项维护 | 配置 |
@@ -1065,7 +1106,7 @@
 | Q7 | 入职承诺书模板与「管控单位/用工单位→模板」配置表 | RS020105 | 中 | 合同模块 |
 | Q8 | 附件单文件大小上限、格式白名单 | RS020104 | 低 | 架构团队 |
 | Q9 | 《资料上传真实性承诺》保存位置（入职工单 vs 合同工单，原文不一致） | RS020104/附件 | 低 | 业务方 |
-| Q10 | `/api/upload` 扩展 `field` 参数以支持 10 类附件（apiName 已通过 fields 接口确认，见 4.4.1 ⑬） | RS020104/附件 | 高 | 后端 |
+| Q10 | 附件接口的 `field` 参数取值清单：10 类附件各自的 apiName 是否都已在 ServiceGo `GET /api/v1/fields` 确认（本平台附件接口设计已含 field 参数，此项仅确认 apiName 取值，见 4.4.1 ⑬） | RS020104/附件 | 中 | ServiceGo 管理员 |
 | Q11 | 身份证背面字段不存在：工单仅有 `validIdCard`（label=证件照），无独立背面字段。确认：正反面共用 `validIdCard`（多附件）还是新建背面字段 | RS020104/附件 | 高 | ServiceGo 管理员 + 业务方 |
 | Q12 | 员工照片存在两个字段：`staffPhoto`（图片类型）和 `staffPhotobak`（附件类型）。确认用哪个、bak 是否废弃 | RS020104/附件 | 中 | ServiceGo 管理员 |
 | Q13 | 资料上传真实性承诺字段为 `dataUploadCommitmentBAK`（带 BAK 后缀），疑似废弃字段，与 Q9 叠加，需明确正式字段位置 | RS020104/附件 | 中 | 业务方 |
@@ -1098,23 +1139,25 @@ const options = (fieldMap.get('recruitChannel')?.optionList ?? [])
 const editable = fieldMap.get('chineseName')?.permissionCode === 4;
 ```
 
-## 附录 B：现有后端接口（本项目已实现）
+## 附录 B：ServiceGo 附件对接参考蓝本（非本平台依赖）
 
-`PhotoController`（Spring Boot，8283）+ `ServiceGoClient`，对接 ServiceGo 附件三件套。
+> **说明**：本附录描述的是项目历史上的单字段照片上传实现，**仅作为本入职业务平台对接 ServiceGo 附件的参考蓝本**，帮助理解附件三件套的对接套路。本平台附件功能为**独立实现**（接口见 4.4.4 的 `/api/entry/attachment/*`），与此蓝本无运行时耦合。
+
+蓝本：`PhotoController`（Spring Boot，8283）+ `ServiceGoClient`，对接 ServiceGo 附件三件套。
 
 | 方法 | 路径 | 参数 | 功能 |
 |------|------|------|------|
-| POST | `/api/upload` | file, phone | 按 personalPhone 查工单 dataId → 上传至附件字段（当前写死 `validIdCard`，配置项 `servicego.entry-id-card-field`）→ 返回 `{success, dataId, fieldApiName, previewUrl}` |
+| POST | `/api/upload` | file, phone | 按 personalPhone 查工单 dataId → 上传至附件字段（写死 `validIdCard`，配置项 `servicego.entry-id-card-field`）→ 返回 `{success, dataId, fieldApiName, previewUrl}` |
 | GET | `/api/attachment` | dataId, field | 取该字段最新一张附件 docAddress，加签名（SHA-256）后由后端**流式代理**回传，解决跨域与下载鉴权；返回头 `Cache-Control: no-store` |
 
-**后端关键方法（ServiceGoClient）**：
+**可参考的对接套路（ServiceGoClient）**：
 - `queryDataIdByPhone(objectApiName, "personalPhone", phone)` → GET `/api/v1/data`（uniqueFieldApiName 定位）。
 - `uploadAttachment(dataId, objectApiName, fieldApiName, fileName, bytes, contentType)` → POST `/api/v1/fileField/attachments`（multipart）。
 - `latestAttachmentUrl(dataId, objectApiName, fieldApiName)` → 从 `fieldDataList[].attachment.attachmentList`（图片类回退 `picture.attachmentList`）取最新附件地址。
 - `signDownloadUrl(url)` → 补 email + timestamp + sign。
 - 签名：`sha256(email + "&" + apiToken + "&" + timestamp)`。
 
-> 改造点：现有 `/api/upload` 仅支持单字段上传，要支撑入职 10 类附件，需让接口接收 `field` 参数并透传给 `uploadAttachment` 的 `fieldApiName`（详见 4.4.4、待确认事项 Q10）。
+> **与本平台的差异**：蓝本只支持单字段（写死 `validIdCard`）；本平台从设计之初即通过 `field` 参数支持 10 类附件，是全新独立实现，不是对蓝本的「改造」（详见 4.4.4、待确认事项 Q10）。
 
 ## 附录 C：移动端 H5 页面原型清单（`F:\Jay\h5-app\`）
 
