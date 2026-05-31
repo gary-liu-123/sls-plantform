@@ -400,20 +400,25 @@
 
 **⑬ 入职附件（文件字段，走附件代理接口，不走 fieldDataList）**
 
-每类附件对应 ServiceGo 工单上的一个**文件字段**（fieldTypeName = `文件字段` / `field_type_image`），上传走附件三件套，不进 `fieldDataList`。附件字段的 apiName 需从 `GET /api/v1/fields` 动态获取（下表 apiName 为业务约定值，落地以 fields 接口返回为准）。
+每类附件对应 ServiceGo 工单上的一个**文件字段**（fieldTypeName = `附件` / `图片`），上传走附件三件套，不进 `fieldDataList`。下表 apiName 为 `GET /api/v1/fields` 实际返回值（2026-05-31 查询确认）。
 
-| 序号 | 附件名称 | 对应字段 apiName（待 fields 接口确认） | 流程 | 上传规则 |
-|------|----------|------------------------|------|----------|
-| 1 | 个人简历 | resumeAttach | 入职预约 | 选传 |
-| 2 | 体检报告 | healthReportAttach | 入职预约 | 必传 |
-| 3 | 员工照片 | photoAttach | 入职预约 | 必传，1寸照，JPEG，< 2MB，推荐 180×240 |
-| 4 | 个人有效身份证（正面） | validIdCard | 入职登记 | 必传 |
-| 5 | 个人有效身份证（背面） | validIdCardBack | 入职登记 | 必传 |
-| 6 | 毕业证/电子学历注册备案表 | eduCertAttach | 入职登记 | 选传 |
-| 7 | 学位证 | degreeCertAttach | 入职登记 | 选传 |
-| 8 | 学生证 | studentCardAttach | 入职登记 | 选传（仅实习生） |
-| 9 | 离职证明/解除劳动合同通知书 | resignProofAttach | 入职登记 | 选传（有工作经历者） |
-| 10 | 工资银行卡 | bankCardAttach | 入职登记 | 选传 |
+| 序号 | 附件名称 | 对应字段 apiName | 字段类型 | 流程 | 上传规则 |
+|------|----------|------------------|----------|------|----------|
+| 1 | 个人简历 | personalResume | 附件 | 入职预约 | 选传 |
+| 2 | 体检报告 | physicalExamReport | 附件 | 入职预约 | 必传 |
+| 3 | 员工照片 | staffPhoto | **图片** | 入职预约 | 必传，1寸照，JPEG，< 2MB，推荐 180×240 |
+| 4 | 个人有效身份证（正面） | validIdCard | 附件 | 入职登记 | 必传 |
+| 5 | 个人有效身份证（背面） | **待确认（字段不存在）** | — | 入职登记 | 必传 |
+| 6 | 毕业证/电子学历注册备案表 | diplomaRecordForm | 附件 | 入职登记 | 选传 |
+| 7 | 学位证 | degreeCertificate | 附件 | 入职登记 | 选传 |
+| 8 | 学生证 | studentCard | 附件 | 入职登记 | 选传（仅实习生） |
+| 9 | 离职证明/解除劳动合同通知书 | dimissionCert | 附件 | 入职登记 | 选传（有工作经历者） |
+| 10 | 工资银行卡 | salaryBankCard | 附件 | 入职登记 | 选传 |
+
+> **字段差异待确认（已登记 Q11/Q12/Q13）：**
+> - **#5 身份证背面字段不存在**：工单仅有 `validIdCard`（label=证件照），无独立背面字段。需确认：正反面都传到 `validIdCard`（多附件）还是新建背面字段。
+> - **#3 员工照片存在两个字段**：`staffPhoto`（图片类型）+ `staffPhotobak`（附件类型，带 bak 后缀）。需确认用哪个、bak 是否废弃。
+> - **资料上传真实性承诺**：工单字段为 `dataUploadCommitmentBAK`（带 BAK 后缀），疑似备份/废弃字段，且与 Q9（保存位置矛盾）叠加，需业务方明确。
 
 > 现状提示：项目现有 `POST /api/upload` 仅支持上传到**单一固定字段**（后端配置项 `servicego.entry-id-card-field`，当前写死 `validIdCard`），客户端不传 field 参数。要支撑上表 10 类附件，需扩展接口以接收 `field` 参数。详见 4.4.4。
 
@@ -1070,7 +1075,10 @@
 | Q7 | 入职承诺书模板与「管控单位/用工单位→模板」配置表 | RS020105 | 中 | 合同模块 |
 | Q8 | 附件单文件大小上限、格式白名单 | RS020104 | 低 | 架构团队 |
 | Q9 | 《资料上传真实性承诺》保存位置（入职工单 vs 合同工单，原文不一致） | RS020104/附件 | 低 | 业务方 |
-| Q10 | `/api/upload` 扩展 `field` 参数以支持 10 类附件；10 个附件字段 apiName 需经 fields 接口确认 | RS020104/附件 | 高 | 后端 + ServiceGo 管理员 |
+| Q10 | `/api/upload` 扩展 `field` 参数以支持 10 类附件（apiName 已通过 fields 接口确认，见 4.4.1 ⑬） | RS020104/附件 | 高 | 后端 |
+| Q11 | 身份证背面字段不存在：工单仅有 `validIdCard`（label=证件照），无独立背面字段。确认：正反面共用 `validIdCard`（多附件）还是新建背面字段 | RS020104/附件 | 高 | ServiceGo 管理员 + 业务方 |
+| Q12 | 员工照片存在两个字段：`staffPhoto`（图片类型）和 `staffPhotobak`（附件类型）。确认用哪个、bak 是否废弃 | RS020104/附件 | 中 | ServiceGo 管理员 |
+| Q13 | 资料上传真实性承诺字段为 `dataUploadCommitmentBAK`（带 BAK 后缀），疑似废弃字段，与 Q9 叠加，需明确正式字段位置 | RS020104/附件 | 中 | 业务方 |
 
 ---
 
