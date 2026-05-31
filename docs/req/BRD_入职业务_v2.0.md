@@ -40,7 +40,7 @@
   ▼
 ④入职指引查阅(RS020103)  按基地/用工形式动态展示
   ▼
-⑤入职资料填写(RS020104)  122字段 + 10类附件，暂存/提交
+⑤入职资料填写(RS020104)  122字段 + 9个附件字段，暂存/提交
   ▼
 ⑥真实性承诺签署(RS020105)  H5页面承诺书，点击勾选确认，并提交后不可撤销
   ▼
@@ -79,7 +79,7 @@
 | 工单状态 | 枚举 | — | 是 | entryWorkOrder.orderStatus | 决定进入页面及编辑权限 |
 
 **业务规则**：
-1. 输入手机号 → 调用「按手机号查工单」接口（F:\githubprojects\sls-plantform\backend\src\test\java\com\example\photo\EntryWorkOrderSearchByPhoneAndStatusTest.java），返回为空 → 提示「未找到入职信息，请联系 HR」，**不下发验证码**。
+1. 输入手机号 → 调用「按手机号查工单」接口（POST ServiceGo `/api/v1/datas/search`，参考 `EntryWorkOrderSearchByPhoneAndStatusTest`；`filterId = 241586`，条件 `personalPhone is_any` + `orderStatus not "入职终止"`），返回为空 → 提示「未找到入职信息，请联系 HR」，**不下发验证码**。
 2. 工单状态 = `入职终止` → 提示「入职流程已终止」，拒绝登录。
 3. 校验通过 → 生成 6 位数字验证码存 Redis（key 含手机号，TTL 300s），调用短信平台下发。
 4. 同一手机号 60 秒内不可重复获取验证码；验证码错误累计 5 次锁定 2 小时。
@@ -217,7 +217,7 @@
 
 ### 4.4 RS020104 提交入职资料（核心）
 
-**功能描述**：员工分组填写个人信息并上传证明材料，支持「录入 / 暂存 / 提交」三种模式。共 13 个信息类型、122 个业务字段、10 类附件。
+**功能描述**：员工分组填写个人信息并上传证明材料，支持「录入 / 暂存 / 提交」三种模式。共 13 个信息类型、122 个业务字段、9 个附件字段（身份证正反面共用 `validIdCard` 多图字段）。
 
 **前置条件**：已签署隐私声明；工单状态 = `入职登记`（否则只读）。
 
@@ -392,72 +392,101 @@
 
 每类附件对应 ServiceGo 工单上的一个**文件字段**（fieldTypeName = `附件` / `图片`），上传走附件三件套，不进 `fieldDataList`。下表 apiName 为 `GET /api/v1/fields` 实际返回值（2026-05-31 查询确认）。
 
-| 序号 | 附件名称 | 对应字段 apiName | 字段类型 | 流程 | 上传规则 |
-|------|----------|------------------|----------|------|----------|
-| 1 | 个人简历 | personalResume | 附件 | 入职预约 | 选传 |
-| 2 | 体检报告 | physicalExamReport | 附件 | 入职预约 | 必传 |
-| 3 | 员工照片 | staffPhoto | **图片** | 入职预约 | 必传，1寸照，JPEG，< 2MB，推荐 180×240 |
-| 4 | 个人有效身份证（正面） | validIdCard | 附件 | 入职登记 | 必传 |
-| 5 | 个人有效身份证（背面） | **待确认（字段不存在）** | — | 入职登记 | 必传 |
-| 6 | 毕业证/电子学历注册备案表 | diplomaRecordForm | 附件 | 入职登记 | 选传 |
-| 7 | 学位证 | degreeCertificate | 附件 | 入职登记 | 选传 |
-| 8 | 学生证 | studentCard | 附件 | 入职登记 | 选传（仅实习生） |
-| 9 | 离职证明/解除劳动合同通知书 | dimissionCert | 附件 | 入职登记 | 选传（有工作经历者） |
-| 10 | 工资银行卡 | salaryBankCard | 附件 | 入职登记 | 选传 |
+| 序号 | 附件名称 | 对应字段 apiName | 字段类型 | 容量 | 流程 | 上传规则 |
+|------|----------|------------------|----------|------|------|----------|
+| 1 | 个人简历 | personalResume | 附件 | 单图 | 入职预约 | 选传 |
+| 2 | 体检报告 | physicalExamReport | 附件 | 单图 | 入职预约 | 必传 |
+| 3 | 员工照片 | staffPhoto | **图片** | 单图 | 入职预约 | 必传，1寸照，JPEG，< 2MB，推荐 180×240 |
+| 4 | 个人有效身份证（正面 + 背面） | validIdCard | 附件 | **多图** | 入职登记 | 必传，正反面 2 张均传到此字段 |
+| 5 | 毕业证/电子学历注册备案表 | diplomaRecordForm | 附件 | 单图 | 入职登记 | 选传 |
+| 6 | 学位证 | degreeCertificate | 附件 | 单图 | 入职登记 | 选传 |
+| 7 | 学生证 | studentCard | 附件 | 单图 | 入职登记 | 选传（仅实习生） |
+| 8 | 离职证明/解除劳动合同通知书 | dimissionCert | 附件 | 单图 | 入职登记 | 选传（有工作经历者） |
+| 9 | 工资银行卡 | salaryBankCard | 附件 | 单图 | 入职登记 | 选传 |
 
-> **字段差异待确认（已登记 Q11/Q12/Q13）：**
-> - **#5 身份证背面字段不存在**：工单仅有 `validIdCard`（label=证件照），无独立背面字段。需确认：正反面都传到 `validIdCard`（多附件）还是新建背面字段。
-> - **#3 员工照片存在两个字段**：`staffPhoto`（图片类型）+ `staffPhotobak`（附件类型，带 bak 后缀）。确认用staffPhoto。
-> - **资料上传真实性承诺**：工单字段为 `dataUploadCommitmentBAK`（带 BAK 后缀），为废弃字段，需业务方明确了用这个dataUploadCommitment。
+> **字段差异说明：**
+>
+> **已确认（结论生效）：**
+> - **#3 员工照片**：工单存在 `staffPhoto`（图片类型）和 `staffPhotobak`（附件类型，带 bak 后缀）两个字段。**确认采用 `staffPhoto`**，`staffPhotobak` 不使用（Q12 已关闭）。
+> - **资料上传真实性承诺**：工单存在 `dataUploadCommitmentBAK`（带 BAK 后缀，废弃字段）和 `dataUploadCommitment` 两个字段。**确认采用 `dataUploadCommitment`**，`dataUploadCommitmentBAK` 不使用（Q13 已关闭）。
+> - **#4 身份证正反面**：工单 `validIdCard`（附件类型）的 `attachment.attachmentList` 为**数组，支持多张附件**。**确认正反面 2 张均上传到 `validIdCard`**，不新建背面字段（Q11 已关闭）。因此 `validIdCard` 为**多图字段**，附件机制需区别于单图字段处理（见 4.4.4）。
 
 > **定位说明（重要）**：本入职业务平台的附件上传为**独立实现**，不依赖、不复用任何现有项目代码。项目历史上存在的 `PhotoController` / `ServiceGoClient`（单字段照片上传，写死 `validIdCard`）仅作为 **ServiceGo 附件对接模式的参考蓝本**，不构成运行时依赖。本平台据此从零设计一套支持「多附件字段」的上传/回显接口，`field` 参数从设计之初即为必填项，不存在「改造老接口」一说。详见 4.4.4。
 
 #### 4.4.4 附件上传机制（本平台独立实现，参考 ServiceGo 对接模式）
 
-附件不进入 `fieldDataList`，由本平台独立设计的代理接口处理。整体覆盖「**页面打开回显已存附件 → 前端校验 → （重传时先删旧）→ 后端代理上传 → 回显新图**」完整生命周期，后端对接 ServiceGo 附件四件套（查列表 / 上传 / 删除 / 下载）。
+附件不进入 `fieldDataList`，由本平台独立设计的代理接口处理。整体覆盖「**页面打开回显已存附件 → 前端校验 → 后端代理上传 → 回显**」完整生命周期，后端对接 ServiceGo 附件四件套（查列表 / 上传 / 删除 / 下载）。
+
+> **字段容量分类（关键设计前提）**：ServiceGo 文件字段的 `attachment.attachmentList` 是**数组**，原生支持多张附件。本平台据此把 **9 个附件字段**（原 10 类材料中身份证正反面合并到 `validIdCard` 一个字段）分两种处理：
+> - **单图字段**（personalResume、physicalExamReport、staffPhoto、diplomaRecordForm、degreeCertificate、studentCard、dimissionCert、salaryBankCard 共 8 类）：业务上只保留 1 张。回显取该字段唯一/最新一张；重传 = 「先清空该字段旧图再传新图」（上传即替换）。
+> - **多图字段**（`validIdCard`，身份证正反面 2 张共存）：业务上保留多张。回显取该字段**全部**附件列表；上传为「**追加**」一张，不清空已有；删除按 `docId` **精确删单张**，不整体清空。
 
 > **完整生命周期（重要）**：
-> 1. **页面打开**：先根据工单系统中该字段已保存的附件，回显已上传的图片（调附件回显接口，见 (2)）。
-> 2. **首次上传**：该字段无附件 → 前端校验通过 → 直接调上传接口。
-> 3. **重新上传**：该字段已有附件，员工想换一张 → **必须先调 ServiceGo 删除附件接口删掉旧图，再调上传接口**（ServiceGo 文件字段不会自动覆盖，不删旧图会变成多附件叠加）。
+> 1. **页面打开**：根据工单系统中该字段已保存的附件回显已上传图片（调回显接口，见 (2)）。单图字段显示 1 张，多图字段显示全部。
+> 2. **首次上传**：该字段无附件 → 前端校验通过 → 调上传接口。
+> 3. **重新上传 / 增删**：
+>    - **单图字段**：换图 = 先删旧（清空该字段）再传新，对外即「上传即替换」。
+>    - **多图字段**（validIdCard）：再传一张 = **追加**（不动已有）；删某一张 = 按 `docId` 精确删除该张。
 
 > **可参考的 ServiceGo 对接模式（来自蓝本，非依赖）**：① 代理模式（前端经本平台后端中转，不直连 ServiceGo，解决签名+跨域+下载鉴权）；② 四件套流程（查附件列表 GET `/v1/fileField/attachments` → 上传 POST `/api/v1/fileField/attachments` → 删除 PUT `/v1/fileField/attachments/remove` → 下载回显）；③ 签名规则 `SHA-256(email + "&" + apiToken + "&" + timestamp)`；④ 附件读取从 `fieldDataList[].attachment.attachmentList`（图片类回退 `picture.attachmentList`）取最新 `docAddress`，或从查列表接口取 `data[].docId` / `downloadAddress`。
 
 **(1) 上传接口 `POST /api/entry/attachment/upload`（multipart/form-data）**
 
-> 本平台独立设计的接口。接口名仅为约定，最终以实现为准；从设计之初即支持多附件字段（通过 `field` 参数区分 10 类附件），无「写死单字段」的历史包袱。
+> 本平台独立设计的接口。接口名仅为约定，最终以实现为准；从设计之初即支持多附件字段（通过 `field` 参数区分各类附件），无「写死单字段」的历史包袱。
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | file | 是 | 附件文件（MultipartFile） |
 | phone | 是 | 手机号，后端据此定位入职工单 dataId |
-| field | 是 | 目标附件字段 apiName（如 `validIdCard`、`staffPhoto`），区分 10 类附件 |
+| field | 是 | 目标附件字段 apiName（如 `validIdCard`、`staffPhoto`），区分各类附件 |
+| replace | 否 | 是否替换该字段已有附件。单图字段默认 `true`（上传即替换）；多图字段（validIdCard）传 `false` 表示追加。缺省时后端按字段容量分类自动决定 |
 
 后端处理流程（参考蓝本的对接套路，本平台独立实现）：
 1. 校验 file、phone、field 非空。
 2. `queryDataIdByPhone(entryWorkOrder, "personalPhone", phone)` → 拿到工单 dataId（GET `/api/v1/data`，uniqueFieldApiName = personalPhone）。
-3. **重传前清理**：查该字段附件列表（GET ServiceGo `/v1/fileField/attachments`），若已存在附件，先调删除接口（见 (3)）清空旧图，再上传，避免同字段附件叠加。
+3. **按字段容量分类决定是否清旧**：
+   - **单图字段**（replace=true）：查该字段附件列表（GET ServiceGo `/v1/fileField/attachments`），若已存在附件先调删除接口（见 (3)）清空，再上传，避免叠加。
+   - **多图字段** `validIdCard`（replace=false）：**不清空**，直接追加上传（正反面共存）。
 4. `uploadAttachment(dataId, objectApiName, field, fileName, bytes, contentType)` → POST ServiceGo `/api/v1/fileField/attachments`（multipart，form 含 objectApiName / dataId / fieldApiName / file）。
-5. 返回：`{ success, dataId, fieldApiName, previewUrl }`，其中 `previewUrl = /api/entry/attachment?dataId=X&field=Y&ts=<时间戳>`（带 ts 防前端缓存旧图）。
+5. 返回：`{ success, dataId, fieldApiName, previewUrl }`（多图字段可返回 `previewUrls` 数组或新增一张的地址），`previewUrl = /api/entry/attachment?dataId=X&field=Y&ts=<时间戳>`（带 ts 防前端缓存旧图）。
 
-> 关于「重传先删」的归属：步骤 3 可由后端在 upload 接口内**自动完成**（推荐，前端无感，单次调用即「替换」语义）；也可由前端先显式调删除接口 (3) 再调上传。本平台默认采用**后端自动清理**方案，对外表现为「上传即替换」。
+> 关于「单图先删后传」的归属：步骤 3 单图分支可由后端在 upload 接口内**自动完成**（推荐，前端无感，单次调用即「替换」语义）；也可由前端先显式调删除接口 (3) 再调上传。本平台默认采用**后端自动清理**方案。多图字段（validIdCard）不走清空逻辑，按追加处理。
 
-**(2) 回显/下载接口 `GET /api/entry/attachment`**
+**(2) 回显接口 `GET /api/entry/attachment`**
 
-> **页面打开即调用**：资料填写页加载时，对每个附件字段调一次本接口，把工单系统中已保存的图片回显出来（已传过的显示缩略图，未传的显示上传占位）。这是附件生命周期的第一步。
+> **页面打开即调用**：资料填写页加载时，对每个附件字段调一次本接口回显已存图片。单图字段显示 1 张，多图字段（validIdCard）显示全部。这是附件生命周期的第一步。
+
+本接口有两种语义，按字段容量使用：
+
+**(2a) 取附件列表（元数据）`GET /api/entry/attachment/list`**
+
+返回该字段下所有附件的元数据，多图字段用它拿到每张的 `docId` 与代理预览地址。
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | dataId | 是 | 工单 ID |
 | field | 是 | 附件字段 apiName |
 
-后端 `latestAttachmentUrl` 从工单 `fieldDataList[].attachment.attachmentList`（图片类字段回退到 `picture.attachmentList`）取**最新一张**附件的 `docAddress`，经 `signDownloadUrl` 补签名（email + timestamp + sign，SHA-256）后由后端**流式代理回传**，从而解决跨域与下载鉴权问题。返回头 `Cache-Control: no-store`。该字段无附件时返回 404 / 空，前端按「未上传」处理。
+返回：`{ field, items: [ { docId, name, size, previewUrl } ] }`，其中 `previewUrl = /api/entry/attachment?dataId=X&field=Y&docId=Z&ts=...`。后端数据源为 ServiceGo GET `/v1/fileField/attachments`（取 `data[].docId / name / size`）或工单 `attachment.attachmentList`。
+
+**(2b) 取单张图片（流式代理）`GET /api/entry/attachment`**
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| dataId | 是 | 工单 ID |
+| field | 是 | 附件字段 apiName |
+| docId | 否 | 指定取哪一张；不传时单图字段取唯一/最新一张，多图字段取最新一张 |
+
+后端从 `attachment.attachmentList`（图片类字段回退到 `picture.attachmentList`）按 `docId` 定位（或取最新一张）拿到 `docAddress`，经 `signDownloadUrl` 补签名（email + timestamp + sign，SHA-256）后**流式代理回传**，解决跨域与下载鉴权。返回头 `Cache-Control: no-store`。该字段无附件时返回 404 / 空，前端按「未上传」处理。
+
+> **单图字段**：前端直接用 (2b)（不带 docId）即可回显唯一一张，无需调 (2a)。
+> **多图字段**（validIdCard）：前端先调 (2a) 拿列表，再对每个 `previewUrl`（带 docId）渲染缩略图。
 
 > 设计要点：附件下载必须经后端代理加签，前端不能直连 ServiceGo 存储地址（无签名会被拒、且跨域）。
 
 **(3) 删除附件接口 `DELETE /api/entry/attachment`（本平台独立实现，转发 ServiceGo 删除接口）**
 
-> 用于「重新上传」场景：换图前先删旧图。本接口封装 ServiceGo 的 PUT `/v1/fileField/attachments/remove`（注意路径前缀比其它接口少 `/api`）。
+> 两种用途：① 单图字段换图前清空旧图；② 多图字段（validIdCard）删掉指定的某一张。本接口封装 ServiceGo 的 PUT `/v1/fileField/attachments/remove`（注意路径前缀比其它接口少 `/api`）。
 
 本平台对外接口参数：
 
@@ -465,7 +494,7 @@
 |------|------|------|
 | dataId | 是 | 工单 ID |
 | field | 是 | 附件字段 apiName |
-| docIds | 否 | 要删除的附件 docId 数组；不传则等价清空该字段全部附件 |
+| docIds | 否 | 要删除的附件 docId 数组。**多图字段删单张时必传**（精确删某张）；不传则清空该字段全部附件（单图换图用） |
 
 后端转发到 ServiceGo `PUT /v1/fileField/attachments/remove` 的参数：
 
@@ -477,7 +506,9 @@
 | isClear | 整型 | 是 | 是否清空，0=否 1=是 |
 | docIds | 字符串数组 | 否 | 要删的 docId；`isClear=0` 时数组必须有元素 |
 
-> docId 从查附件列表接口（ServiceGo GET `/v1/fileField/attachments`，返回 `data[].docId`）取得。重传时若直接清空该字段（`isClear=1`）最简单，无需先查 docId。
+映射规则：
+- **单图换图 / 整体清空**：`isClear=1`，无需 docIds（最简单）。
+- **多图删单张**（validIdCard 删正面或背面）：`isClear=0` + `docIds=[要删的那张]`。docId 从 (2a) 列表接口取得。
 
 **(4) 前端上传校验规则（参考批量上传设计）**
 
@@ -495,10 +526,11 @@
 
 **(5) 多附件上传策略**
 
-- **页面打开**：遍历各附件字段调 `GET /api/entry/attachment` 回显已存图片（见 (2)）。
+- **页面打开**：单图字段调 `GET /api/entry/attachment`（见 (2b)）回显 1 张；多图字段（validIdCard）调 `GET /api/entry/attachment/list`（见 (2a)）回显全部。
 - 每类附件独立调用 `POST /api/entry/attachment/upload`（带各自 field），互不影响，单个失败可单独重试。
-- **重新上传**：该字段已有图 → 上传接口内部先清旧再传（后端自动，见 (1) 步骤 3），对外即「上传即替换」；前端也可显式先调 `DELETE /api/entry/attachment` 再传。
-- 上传成功后用返回的 `previewUrl`（带 ts）即时回显新缩略图，覆盖旧图。
+- **单图字段重传**：上传接口内部先清旧再传（后端自动，见 (1) 步骤 3），对外即「上传即替换」；前端也可显式先调 `DELETE` 再传。
+- **多图字段**（validIdCard 正反面）：每张独立追加上传（`replace=false`），互不覆盖；删某一张调 `DELETE`（带该张 `docId`）。上传成功后刷新列表回显。
+- 上传成功后用返回的 `previewUrl`（带 ts）即时回显，单图覆盖旧图、多图追加一张。
 - 批量/多图场景并发上传建议并发数 3，避免 ServiceGo 端压力；前端可用 SHA-256 + localStorage 做客户端去重（"已上传过，跳过"）。
 - 弱网下未上传成功的附件保留在列表，恢复后重试，不影响已填写的文本字段。
 
@@ -553,17 +585,17 @@
 
 **数据项**：
 
-| 数据项 | 类型 | 必填 | 来源 | 说明 |
-|--------|------|------|------|------|
-| 承诺书内容 | PDF | 是 | 合同模块-模板管理（类型=入职承诺书） | 按管控单位/用工单位匹配模板 |
-| 确认状态 | 布尔 | 是 | 员工操作 | 已确认/未确认 |
-| 确认时间 | 时间戳 | 是 | 系统生成 | |
-| 工单状态 | 列表 | 是 | 系统 | 提交后 入职登记 → 待审核 |
-| 入职任务-真实性承诺 | 列表 | 是 | 系统 | 签署后置「完成」 |
+| 数据项 | 类型       | 必填 | 来源 | 说明 |
+|--------|----------|------|------|------|
+| 承诺书内容 | markdown | 是 | 合同模块-模板管理（类型=入职承诺书） | 按管控单位/用工单位匹配模板 |
+| 确认状态 | 布尔       | 是 | 员工操作 | 已确认/未确认 |
+| 确认时间 | 时间戳      | 是 | 系统生成 | |
+| 工单状态 | 列表       | 是 | 系统 | 提交后 入职登记 → 待审核 |
+| 入职任务-真实性承诺 | 列表       | 是 | 系统 | 签署后置「完成」 |
 
 **业务规则**：
-1. 根据工单「管控单位、用工单位」从配置表匹配《入职承诺书》模板，PDF 渲染展示。
-2. 员工确认签署 → 生成《资料上传真实性承诺》附件存工单 → 工单状态置「待审核」→ 触发 AI 审核异步任务。
+1. 根据工单「管控单位、用工单位」从配置表匹配《入职承诺书》模板，markdown 渲染展示。
+2. 员工确认签署 → 生成《资料上传真实性承诺》附件存工单（附件字段 apiName = `dataUploadCommitment`，**非** `dataUploadCommitmentBAK`，后者已弃用）→ 工单状态置「待审核」→ 触发 AI 审核异步任务。
 3. 签署不可撤销；签署弹窗需二次确认，未签署不可关闭提交。
 4. 未签真实性承诺**不允许提交**入职资料。
 
@@ -591,15 +623,13 @@
 
 **业务规则**：
 1. 提交触发异步任务（走消息队列），不阻塞员工端。
-2. 调用大模型提供的 AI 审核接口（本系统只传图片/数据并接收结果），比对项：身份证姓名↔chineseName、证件号↔certificateNo、有效期↔certificateExpireDate 等。
+2. 调用大模型提供的 AI 审核接口（本系统只传图片/数据并接收结果），比对项：身份证姓名↔chineseName、证件号↔certificateNo、有效期↔certificateExpireDate 等。**对方接口未提供，先后端 Mock（返回模拟审核结果），待对方提供后替换为真实接口（Q3）。**
 3. 审核结果（通过/错误）+ 异常字段 + 异常描述 回写工单，供 HR 在 PC 端查看。
 4. 本期仅身份证识别；工作经历、教育、银行卡为后续扩展。
 
 **关联接口**：I020-07-01（数据推送 AI；AI 结果写工单）。
 
 **异常处理**：Dify 超时（30s）熔断；失败进重试队列（最多 3 次，间隔递增）；最终失败 → 工单标「待人工审核」，**降级为纯人工审核**，不阻断流程。
-
-**验收标准**：异步执行不阻塞提交；识别准确率 ≥ 99%；异常字段清单准确回写；服务不可用可降级。
 
 ---
 
@@ -611,16 +641,17 @@
 
 **数据项**：
 
-| 数据项 | 类型 | 必填 | 来源 | 说明 |
-|--------|------|------|------|------|
-| 签到二维码 | 二维码 | 是 | 现场易拉宝 | 动态生成 |
-| 签到状态 | 枚举 | 是 | 系统 | 已签到 / 未签到 |
-| 签到时间 | 时间戳 | 是 | 系统生成 | 作为劳动关系起始日佐证之一 |
+| 数据项 | 类型 | 必填 | 来源 | 说明                              |
+|--------|------|------|------|---------------------------------|
+| 签到二维码 | 二维码 | 是 | 现场易拉宝 | 本系统生成一个二维码页面展示，可以打印之后交给对方用于扫描签到 |
+| 签到状态 | 枚举 | 是 | 系统 | 已签到 / 未签到                       |
+| 签到时间 | 时间戳 | 是 | 系统生成 | 作为劳动关系起始日佐证之一                   |
 
 **业务规则**：
 1. 飞书扫码跳转移动端签到确认页，确认后写工单签到状态 + 签到时间。
 2. 重复扫码幂等：已签到则提示「您已签到」，不重复写时间。
 3. 签到时间作为劳动关系起始日佐证之一，需精确到秒。
+4. 签到的二维码绑定签到时间（比如说 2026-01-13,2026-01-14,2026-01-15），扫描的时间不在这个时间段则提示活动未开始或已结束。
 
 **关联接口**：I060-01-01（飞书扫码跳转移动端）、I060-01-02（签到状态更新工单）。
 
@@ -632,7 +663,7 @@
 
 ### 4.8 RS090102 入职满意度评价
 
-**功能描述**：入职完成后系统自动发送短信/飞书消息，员工点击 H5 链接进行满意度评价，结果同步工单。
+**功能描述**：入职完成后用户会收到其他系统发给用户一个链接，员工点击 H5 链接进入本系统的一个评价页面，进行满意度评价，结果同步工单。
 
 **前置条件**：入职经办人点击「入职完成」。
 
@@ -649,7 +680,7 @@
 2. 员工进入 H5 填写 2 道评分（1-5）+ 开放评价，提交后同步对应工单字段。
 3. 每个工单仅可评价一次；重复进入展示已评价结果。
 
-**关联接口**：I090-02-01（飞书）、I090-02-02（移动端满意度更新工单）。
+**关联接口**：入职工单接口有对应的满意度评价字段，将结果更新进去就好了。
 
 **异常处理**：评价提交失败 → 重试，保留已填内容。
 
@@ -698,7 +729,6 @@
 **I060 二维码签到（2）**：飞书扫码跳转移动端 / 签到状态更新工单。
 **I070 线上合同推送（1）**：工单系统 → 飞书推送签字通知。
 **I080 电子签集成（3）**：登录移动端 / 跳转电子签签字 / 签字状态写工单。
-**I090 报到与满意度（3）**：飞书发部门报到通知 / 满意度评价（飞书）/ 满意度评价（移动端写工单）。
 **I110 合同用印（1）**：工单系统调用慧博封装的电子签用印接口。
 **I120 合同领取（2）**：飞书发领取通知 / 移动端查询+确认「收到」。
 **I980 终止提醒（1）**：工单系统 → 飞书提醒招聘经办人。
@@ -719,7 +749,7 @@
 | SG-API-009 | 创建字段选项值 | 选项维护 | 配置 |
 | SG-API-0010 | 对象搜索查询 | 多条件搜索 | 按手机号+状态搜工单 |
 
-**鉴权约定**（来自项目 CLAUDE.md）：URL 拼 `email + timestamp + sign`，签名用 **SHA-256**（非文档所写 SHA-1）；搜索接口 `filterId` 必填且需后台预配；`judgeStrategy` 1=AND / 2=OR。
+**鉴权约定**（来自项目 CLAUDE.md）：URL 拼 `email + timestamp + sign`，签名用 **SHA-256**（非文档所写 SHA-1）；搜索接口 `filterId` 必填且需后台预配（**入职工单 entryWorkOrder 已配 `filterId = 241586`**）；`judgeStrategy` 1=AND / 2=OR。
 
 ### 5.3 集成系统总表
 
@@ -1083,7 +1113,7 @@
 ### 8.1 技术约束
 - 后端复用 Spring Boot（8283），前端复用 Vite（5173），不引入新框架。
 - 工单字段定义一律通过 `GET /api/v1/fields` 动态获取，**下拉选项不可硬编码**，按 apiName 建 Map 缓存复用。
-- ServiceGo 签名用 SHA-256；搜索接口 filterId 必填需后台预配。
+- ServiceGo 签名用 SHA-256；搜索接口 filterId 必填需后台预配（入职工单已配 `241586`）。
 - 电子签免登链接、企业盖章、结束签署、回调已实现，本期在此基础集成。
 - 附件遵循 OSS 路径模板，合同文件加密存储。
 
@@ -1095,21 +1125,20 @@
 
 ### 8.3 待确认事项（风险登记）
 
-| 编号 | 事项 | 影响功能 | 阻塞级 | 负责方 |
-|------|------|----------|--------|--------|
-| Q1 | DPO 隐私协议接口文档与联调档期 | RS020102 | 高 | DPO 团队 |
-| Q2 | 入职指引接口文档（含 guide.html 字段映射） | RS020103 | 高 | 对接方 |
-| Q3 | Dify 视觉模型接口规范、调用配额、比对规则 | RS020107 | 高 | AI 团队 |
-| Q4 | ServiceGo 入职工单 filterId 配置 | 登录/搜索 | 高 | ServiceGo 管理员 |
-| Q5 | I9 员工号 / SF 主数据接口文档 | I030 | 中 | I9/SF 团队 |
-| Q6 | 飞书机器人 AppID 与权限申请 | I060/I070/I090 | 中 | 飞书管理员 |
-| Q7 | 入职承诺书模板与「管控单位/用工单位→模板」配置表 | RS020105 | 中 | 合同模块 |
-| Q8 | 附件单文件大小上限、格式白名单 | RS020104 | 低 | 架构团队 |
-| Q9 | 《资料上传真实性承诺》保存位置（入职工单 vs 合同工单，原文不一致） | RS020104/附件 | 低 | 业务方 |
-| Q10 | 附件接口的 `field` 参数取值清单：10 类附件各自的 apiName 是否都已在 ServiceGo `GET /api/v1/fields` 确认（本平台附件接口设计已含 field 参数，此项仅确认 apiName 取值，见 4.4.1 ⑬） | RS020104/附件 | 中 | ServiceGo 管理员 |
-| Q11 | 身份证背面字段不存在：工单仅有 `validIdCard`（label=证件照），无独立背面字段。确认：正反面共用 `validIdCard`（多附件）还是新建背面字段 | RS020104/附件 | 高 | ServiceGo 管理员 + 业务方 |
-| Q12 | 员工照片存在两个字段：`staffPhoto`（图片类型）和 `staffPhotobak`（附件类型）。确认用哪个、bak 是否废弃 | RS020104/附件 | 中 | ServiceGo 管理员 |
-| Q13 | 资料上传真实性承诺字段为 `dataUploadCommitmentBAK`（带 BAK 后缀），疑似废弃字段，与 Q9 叠加，需明确正式字段位置 | RS020104/附件 | 中 | 业务方 |
+| 编号 | 事项 | 影响功能 | 阻塞级 | 负责方 | 状态 |
+|------|------|----------|--------|--------|------|
+| Q1 | DPO 隐私协议接口文档与联调档期 | RS020102 | 高 | DPO 团队 | open（先 Mock） |
+| Q2 | 入职指引接口文档（含 guide.html 字段映射） | RS020103 | 高 | 对接方 | open（先 Mock） |
+| Q3 | Dify 视觉模型接口规范、调用配额、比对规则 | RS020107 | 高 | AI 团队 | **deferred：对方接口未提供，先后端 Mock，待提供后替换为真实接口** |
+| Q4 | ServiceGo 入职工单 filterId 配置 | 登录/搜索 | 高 | ServiceGo 管理员 | **✅ resolved：已有 filterId = `241586`（见 `EntryWorkOrderSearchByPhoneAndStatusTest`）** |
+| Q5 | I9 员工号 / SF 主数据接口文档 | I030 | 中 | I9/SF 团队 | open |
+| Q7 | 入职承诺书模板与「管控单位/用工单位→模板」配置表 | RS020105 | 中 | 合同模块 | open |
+| Q8 | 附件单文件大小上限、格式白名单 | RS020104 | 低 | 架构团队 | open（暂按 2MB/JPEG） |
+| Q9 | 《资料上传真实性承诺》保存位置（入职工单 vs 合同工单，原文不一致） | RS020104/附件 | 低 | 业务方 | open（暂按入职工单） |
+| Q10 | 附件接口的 `field` 参数取值清单：9 个附件字段各自的 apiName 是否都已在 ServiceGo `GET /api/v1/fields` 确认（本平台附件接口设计已含 field 参数，此项仅确认 apiName 取值，见 4.4.1 ⑬） | RS020104/附件 | 中 | ServiceGo 管理员 | open |
+| Q11 | 身份证背面字段不存在：工单仅有 `validIdCard`（label=证件照），无独立背面字段。确认：正反面共用 `validIdCard`（多附件）还是新建背面字段 | RS020104/附件 | 高 | ServiceGo 管理员 + 业务方 | **✅ resolved：`validIdCard` 的 attachmentList 支持多张，正反面 2 张均上传到 `validIdCard`，不新建背面字段；validIdCard 按「多图字段」处理（见 4.4.4）** |
+| Q12 | 员工照片存在两个字段：`staffPhoto`（图片类型）和 `staffPhotobak`（附件类型）。确认用哪个、bak 是否废弃 | RS020104/附件 | 中 | ServiceGo 管理员 | **✅ resolved：采用 `staffPhoto`，`staffPhotobak` 弃用** |
+| Q13 | 资料上传真实性承诺字段为 `dataUploadCommitmentBAK`（带 BAK 后缀），疑似废弃字段，与 Q9 叠加，需明确正式字段位置 | RS020104/附件 | 中 | 业务方 | **✅ resolved：采用 `dataUploadCommitment`，`dataUploadCommitmentBAK` 弃用** |
 
 ---
 
@@ -1157,7 +1186,7 @@ const editable = fieldMap.get('chineseName')?.permissionCode === 4;
 - `signDownloadUrl(url)` → 补 email + timestamp + sign。
 - 签名：`sha256(email + "&" + apiToken + "&" + timestamp)`。
 
-> **与本平台的差异**：蓝本只支持单字段（写死 `validIdCard`）；本平台从设计之初即通过 `field` 参数支持 10 类附件，是全新独立实现，不是对蓝本的「改造」（详见 4.4.4、待确认事项 Q10）。
+> **与本平台的差异**：蓝本只支持单字段（写死 `validIdCard`）；本平台从设计之初即通过 `field` 参数支持多个附件字段（含 validIdCard 多图），是全新独立实现，不是对蓝本的「改造」（详见 4.4.4、待确认事项 Q10）。
 
 ## 附录 C：移动端 H5 页面原型清单（`F:\Jay\h5-app\`）
 
