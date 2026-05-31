@@ -126,6 +126,7 @@ const options = fieldMap.get('recruitChannel')?.optionList ?? [];
 | `EntryWorkOrderSearchByPhoneAndStatusTest` | `entryWorkOrder` | POST `/api/v1/datas/search` | `personalPhone is_any` + `orderStatus not "入职终止"`，`filterId` 待后台配 |
 | `ContractWorkOrderSearchByPhoneAndStatusTest` | `contractWorkOrder` | POST `/api/v1/datas/search` | `personalPhone is_any` + `contractStatus not "合同办理完成"`，`filterId=241618` |
 | `EntryWorkOrderFieldsTest` | `entryWorkOrder` | GET `/api/v1/fields` | `objectApiName=entryWorkOrder` |
+| `ContractWorkOrderFieldsTest` | `contractWorkOrder` | GET `/api/v1/fields` | `objectApiName=contractWorkOrder` |
 | `SmsServiceTest` | — | POST `/api/sms/messages` | 先取 token，需 `@SpringBootTest(classes = PhotoApplication.class)` |
 
 ## 关键字段速查
@@ -133,8 +134,6 @@ const options = fieldMap.get('recruitChannel')?.optionList ?? [];
 | 业务概念 | apiName | 类型 | 注意事项 |
 | --- | --- | --- | --- |
 | 个人电话 | `personalPhone` | 电话 | search 用 `is_any` operator |
-| 中文全名 | `chineseName` | 单行文本 | |
-| 外文全名 | `foreignName` | 单行文本 | |
 | 招聘渠道 | `recruitChannel` | 单选 | 传选项中文名，search 用 `is/not` |
 | 入司日期 | `entryDate` | 日期 | 格式 `yyyy-MM-dd` |
 | 身份证附件 | `validIdCard` | 文件字段 | 不走 `fieldDataList`，走附件接口 |
